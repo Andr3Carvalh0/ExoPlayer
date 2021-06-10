@@ -15,20 +15,16 @@
  */
 package com.google.android.exoplayer2;
 
-import static java.lang.Math.max;
-
-import android.os.Handler;
 import android.util.Pair;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Player.RepeatMode;
-import com.google.android.exoplayer2.analytics.AnalyticsCollector;
 import com.google.android.exoplayer2.source.MediaPeriod;
+import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.MediaSource.MediaPeriodId;
 import com.google.android.exoplayer2.trackselection.TrackSelector;
 import com.google.android.exoplayer2.trackselection.TrackSelectorResult;
 import com.google.android.exoplayer2.upstream.Allocator;
 import com.google.android.exoplayer2.util.Assertions;
-import com.google.common.collect.ImmutableList;
 
 /**
  * Holds a queue of media periods, from the currently playing media period at the front to the
@@ -46,10 +42,9 @@ import com.google.common.collect.ImmutableList;
 
   private final Timeline.Period period;
   private final Timeline.Window window;
-  @Nullable private final AnalyticsCollector analyticsCollector;
-  private final Handler analyticsCollectorHandler;
 
   private long nextWindowSequenceNumber;
+  private Timeline timeline;
   private @RepeatMode int repeatMode;
   private boolean shuffleModeEnabled;
   @Nullable private MediaPeriodHolder playing;
@@ -59,46 +54,37 @@ import com.google.common.collect.ImmutableList;
   @Nullable private Object oldFrontPeriodUid;
   private long oldFrontPeriodWindowSequenceNumber;
 
-  /**
-   * Creates a new media period queue.
-   *
-   * @param analyticsCollector An optional {@link AnalyticsCollector} to be informed of queue
-   *     changes.
-   * @param analyticsCollectorHandler The {@link Handler} to call {@link AnalyticsCollector} methods
-   *     on.
-   */
-  public MediaPeriodQueue(
-      @Nullable AnalyticsCollector analyticsCollector, Handler analyticsCollectorHandler) {
-    this.analyticsCollector = analyticsCollector;
-    this.analyticsCollectorHandler = analyticsCollectorHandler;
+  /** Creates a new media period queue. */
+  public MediaPeriodQueue() {
     period = new Timeline.Period();
     window = new Timeline.Window();
+    timeline = Timeline.EMPTY;
+  }
+
+  /**
+   * Sets the {@link Timeline}. Call {@link #updateQueuedPeriods(long, long)} to update the queued
+   * media periods to take into account the new timeline.
+   */
+  public void setTimeline(Timeline timeline) {
+    this.timeline = timeline;
   }
 
   /**
    * Sets the {@link RepeatMode} and returns whether the repeat mode change has been fully handled.
    * If not, it is necessary to seek to the current playback position.
-   *
-   * @param timeline The current timeline.
-   * @param repeatMode The new repeat mode.
-   * @return Whether the repeat mode change has been fully handled.
    */
-  public boolean updateRepeatMode(Timeline timeline, @RepeatMode int repeatMode) {
+  public boolean updateRepeatMode(@RepeatMode int repeatMode) {
     this.repeatMode = repeatMode;
-    return updateForPlaybackModeChange(timeline);
+    return updateForPlaybackModeChange();
   }
 
   /**
    * Sets whether shuffling is enabled and returns whether the shuffle mode change has been fully
    * handled. If not, it is necessary to seek to the current playback position.
-   *
-   * @param timeline The current timeline.
-   * @param shuffleModeEnabled Whether shuffling mode is enabled.
-   * @return Whether the shuffle mode change has been fully handled.
    */
-  public boolean updateShuffleModeEnabled(Timeline timeline, boolean shuffleModeEnabled) {
+  public boolean updateShuffleModeEnabled(boolean shuffleModeEnabled) {
     this.shuffleModeEnabled = shuffleModeEnabled;
-    return updateForPlaybackModeChange(timeline);
+    return updateForPlaybackModeChange();
   }
 
   /** Returns whether {@code mediaPeriod} is the current loading media period. */
@@ -134,12 +120,11 @@ import com.google.common.collect.ImmutableList;
    * @return The {@link MediaPeriodInfo} for the next media period to load, or {@code null} if not
    *     yet known.
    */
-  @Nullable
-  public MediaPeriodInfo getNextMediaPeriodInfo(
+  public @Nullable MediaPeriodInfo getNextMediaPeriodInfo(
       long rendererPositionUs, PlaybackInfo playbackInfo) {
     return loading == null
         ? getFirstMediaPeriodInfo(playbackInfo)
-        : getFollowingMediaPeriodInfo(playbackInfo.timeline, loading, rendererPositionUs);
+        : getFollowingMediaPeriodInfo(loading, rendererPositionUs);
   }
 
   /**
@@ -149,7 +134,7 @@ import com.google.common.collect.ImmutableList;
    * @param rendererCapabilities The renderer capabilities.
    * @param trackSelector The track selector.
    * @param allocator The allocator.
-   * @param mediaSourceList The list of media sources.
+   * @param mediaSource The media source that produced the media period.
    * @param info Information used to identify this media period in its timeline period.
    * @param emptyTrackSelectorResult A {@link TrackSelectorResult} with empty selections for each
    *     renderer.
@@ -158,13 +143,13 @@ import com.google.common.collect.ImmutableList;
       RendererCapabilities[] rendererCapabilities,
       TrackSelector trackSelector,
       Allocator allocator,
-      MediaSourceList mediaSourceList,
+      MediaSource mediaSource,
       MediaPeriodInfo info,
       TrackSelectorResult emptyTrackSelectorResult) {
     long rendererPositionOffsetUs =
         loading == null
-            ? (info.id.isAd() && info.requestedContentPositionUs != C.TIME_UNSET
-                ? info.requestedContentPositionUs
+            ? (info.id.isAd() && info.contentPositionUs != C.TIME_UNSET
+                ? info.contentPositionUs
                 : 0)
             : (loading.getRendererOffset() + loading.info.durationUs - info.startPositionUs);
     MediaPeriodHolder newPeriodHolder =
@@ -173,7 +158,7 @@ import com.google.common.collect.ImmutableList;
             rendererPositionOffsetUs,
             trackSelector,
             allocator,
-            mediaSourceList,
+            mediaSource,
             info,
             emptyTrackSelectorResult);
     if (loading != null) {
@@ -185,7 +170,6 @@ import com.google.common.collect.ImmutableList;
     oldFrontPeriodUid = null;
     loading = newPeriodHolder;
     length++;
-    notifyQueueUpdate();
     return newPeriodHolder;
   }
 
@@ -221,7 +205,6 @@ import com.google.common.collect.ImmutableList;
   public MediaPeriodHolder advanceReadingPeriod() {
     Assertions.checkState(reading != null && reading.getNext() != null);
     reading = reading.getNext();
-    notifyQueueUpdate();
     return reading;
   }
 
@@ -247,7 +230,6 @@ import com.google.common.collect.ImmutableList;
       oldFrontPeriodWindowSequenceNumber = playing.info.id.windowSequenceNumber;
     }
     playing = playing.getNext();
-    notifyQueueUpdate();
     return playing;
   }
 
@@ -261,9 +243,6 @@ import com.google.common.collect.ImmutableList;
    */
   public boolean removeAfter(MediaPeriodHolder mediaPeriodHolder) {
     Assertions.checkState(mediaPeriodHolder != null);
-    if (mediaPeriodHolder.equals(loading)) {
-      return false;
-    }
     boolean removedReading = false;
     loading = mediaPeriodHolder;
     while (mediaPeriodHolder.getNext() != null) {
@@ -276,27 +255,29 @@ import com.google.common.collect.ImmutableList;
       length--;
     }
     loading.setNext(null);
-    notifyQueueUpdate();
     return removedReading;
   }
 
-  /** Clears the queue. */
-  public void clear() {
-    if (length == 0) {
-      return;
-    }
-    MediaPeriodHolder front = Assertions.checkStateNotNull(playing);
-    oldFrontPeriodUid = front.uid;
-    oldFrontPeriodWindowSequenceNumber = front.info.id.windowSequenceNumber;
-    while (front != null) {
+  /**
+   * Clears the queue.
+   *
+   * @param keepFrontPeriodUid Whether the queue should keep the id of the media period in the front
+   *     of queue (typically the playing one) for later reuse.
+   */
+  public void clear(boolean keepFrontPeriodUid) {
+    MediaPeriodHolder front = playing;
+    if (front != null) {
+      oldFrontPeriodUid = keepFrontPeriodUid ? front.uid : null;
+      oldFrontPeriodWindowSequenceNumber = front.info.id.windowSequenceNumber;
+      removeAfter(front);
       front.release();
-      front = front.getNext();
+    } else if (!keepFrontPeriodUid) {
+      oldFrontPeriodUid = null;
     }
     playing = null;
     loading = null;
     reading = null;
     length = 0;
-    notifyQueueUpdate();
   }
 
   /**
@@ -305,18 +286,16 @@ import com.google.common.collect.ImmutableList;
    * current playback position. The method assumes that the first media period in the queue is still
    * consistent with the new timeline.
    *
-   * @param timeline The new timeline.
    * @param rendererPositionUs The current renderer position in microseconds.
    * @param maxRendererReadPositionUs The maximum renderer position up to which renderers have read
    *     the current reading media period in microseconds, or {@link C#TIME_END_OF_SOURCE} if they
    *     have read to the end.
    * @return Whether the timeline change has been handled completely.
    */
-  public boolean updateQueuedPeriods(
-      Timeline timeline, long rendererPositionUs, long maxRendererReadPositionUs) {
+  public boolean updateQueuedPeriods(long rendererPositionUs, long maxRendererReadPositionUs) {
     // TODO: Merge this into setTimeline so that the queue gets updated as soon as the new timeline
-    // is set, once all cases handled by ExoPlayerImplInternal.handleMediaSourceListInfoRefreshed
-    // can be handled here.
+    // is set, once all cases handled by ExoPlayerImplInternal.handleSourceInfoRefreshed can be
+    // handled here.
     MediaPeriodHolder previousPeriodHolder = null;
     MediaPeriodHolder periodHolder = playing;
     while (periodHolder != null) {
@@ -326,12 +305,11 @@ import com.google.common.collect.ImmutableList;
       MediaPeriodInfo newPeriodInfo;
       if (previousPeriodHolder == null) {
         // The id and start position of the first period have already been verified by
-        // ExoPlayerImplInternal.handleMediaSourceListInfoRefreshed. Just update duration,
-        // isLastInTimeline and isLastInPeriod flags.
-        newPeriodInfo = getUpdatedMediaPeriodInfo(timeline, oldPeriodInfo);
+        // ExoPlayerImplInternal.handleSourceInfoRefreshed. Just update duration, isLastInTimeline
+        // and isLastInPeriod flags.
+        newPeriodInfo = getUpdatedMediaPeriodInfo(oldPeriodInfo);
       } else {
-        newPeriodInfo =
-            getFollowingMediaPeriodInfo(timeline, previousPeriodHolder, rendererPositionUs);
+        newPeriodInfo = getFollowingMediaPeriodInfo(previousPeriodHolder, rendererPositionUs);
         if (newPeriodInfo == null) {
           // We've loaded a next media period that is not in the new timeline.
           return !removeAfter(previousPeriodHolder);
@@ -342,11 +320,8 @@ import com.google.common.collect.ImmutableList;
         }
       }
 
-      // Use the new period info, but keep the old requested content position to avoid overriding it
-      // by the default content position generated in getFollowingMediaPeriodInfo.
-      periodHolder.info =
-          newPeriodInfo.copyWithRequestedContentPositionUs(
-              oldPeriodInfo.requestedContentPositionUs);
+      // Use new period info, but keep old content position.
+      periodHolder.info = newPeriodInfo.copyWithContentPositionUs(oldPeriodInfo.contentPositionUs);
 
       if (!areDurationsCompatible(oldPeriodInfo.durationUs, newPeriodInfo.durationUs)) {
         // The period duration changed. Remove all subsequent periods and check whether we read
@@ -374,15 +349,13 @@ import com.google.common.collect.ImmutableList;
    * account the current timeline. This method must only be called if the period is still part of
    * the current timeline.
    *
-   * @param timeline The current timeline used to update the media period.
    * @param info Media period info for a media period based on an old timeline.
    * @return The updated media period info for the current timeline.
    */
-  public MediaPeriodInfo getUpdatedMediaPeriodInfo(Timeline timeline, MediaPeriodInfo info) {
+  public MediaPeriodInfo getUpdatedMediaPeriodInfo(MediaPeriodInfo info) {
     MediaPeriodId id = info.id;
     boolean isLastInPeriod = isLastInPeriod(id);
-    boolean isLastInWindow = isLastInWindow(timeline, id);
-    boolean isLastInTimeline = isLastInTimeline(timeline, id, isLastInPeriod);
+    boolean isLastInTimeline = isLastInTimeline(id, isLastInPeriod);
     timeline.getPeriodByUid(info.id.periodUid, period);
     long durationUs =
         id.isAd()
@@ -393,11 +366,10 @@ import com.google.common.collect.ImmutableList;
     return new MediaPeriodInfo(
         id,
         info.startPositionUs,
-        info.requestedContentPositionUs,
+        info.contentPositionUs,
         info.endPositionUs,
         durationUs,
         isLastInPeriod,
-        isLastInWindow,
         isLastInTimeline);
   }
 
@@ -406,53 +378,30 @@ import com.google.common.collect.ImmutableList;
    * played, returning an identifier for an ad group if one needs to be played before the specified
    * position, or an identifier for a content media period if not.
    *
-   * @param timeline The timeline the period is part of.
    * @param periodUid The uid of the timeline period to play.
    * @param positionUs The next content position in the period to play.
    * @return The identifier for the first media period to play, taking into account unplayed ads.
    */
-  public MediaPeriodId resolveMediaPeriodIdForAds(
-      Timeline timeline, Object periodUid, long positionUs) {
-    long windowSequenceNumber = resolvePeriodIndexToWindowSequenceNumber(timeline, periodUid);
-    return resolveMediaPeriodIdForAds(
-        timeline, periodUid, positionUs, windowSequenceNumber, period);
+  public MediaPeriodId resolveMediaPeriodIdForAds(Object periodUid, long positionUs) {
+    long windowSequenceNumber = resolvePeriodIndexToWindowSequenceNumber(periodUid);
+    return resolveMediaPeriodIdForAds(periodUid, positionUs, windowSequenceNumber);
   }
 
   // Internal methods.
-
-  private void notifyQueueUpdate() {
-    if (analyticsCollector != null) {
-      ImmutableList.Builder<MediaPeriodId> builder = ImmutableList.builder();
-      @Nullable MediaPeriodHolder period = playing;
-      while (period != null) {
-        builder.add(period.info.id);
-        period = period.getNext();
-      }
-      @Nullable MediaPeriodId readingPeriodId = reading == null ? null : reading.info.id;
-      analyticsCollectorHandler.post(
-          () -> analyticsCollector.updateMediaPeriodQueueInfo(builder.build(), readingPeriodId));
-    }
-  }
 
   /**
    * Resolves the specified timeline period and position to a {@link MediaPeriodId} that should be
    * played, returning an identifier for an ad group if one needs to be played before the specified
    * position, or an identifier for a content media period if not.
    *
-   * @param timeline The timeline the period is part of.
    * @param periodUid The uid of the timeline period to play.
    * @param positionUs The next content position in the period to play.
    * @param windowSequenceNumber The sequence number of the window in the buffered sequence of
    *     windows this period is part of.
-   * @param period A scratch {@link Timeline.Period}.
    * @return The identifier for the first media period to play, taking into account unplayed ads.
    */
-  private static MediaPeriodId resolveMediaPeriodIdForAds(
-      Timeline timeline,
-      Object periodUid,
-      long positionUs,
-      long windowSequenceNumber,
-      Timeline.Period period) {
+  private MediaPeriodId resolveMediaPeriodIdForAds(
+      Object periodUid, long positionUs, long windowSequenceNumber) {
     timeline.getPeriodByUid(periodUid, period);
     int adGroupIndex = period.getAdGroupIndexForPositionUs(positionUs);
     if (adGroupIndex == C.INDEX_UNSET) {
@@ -469,11 +418,10 @@ import com.google.common.collect.ImmutableList;
    * the window sequence number of an existing matching media period or by creating a new window
    * sequence number.
    *
-   * @param timeline The timeline the period is part of.
    * @param periodUid The uid of the timeline period.
    * @return A window sequence number for a media period created for this timeline period.
    */
-  private long resolvePeriodIndexToWindowSequenceNumber(Timeline timeline, Object periodUid) {
+  private long resolvePeriodIndexToWindowSequenceNumber(Object periodUid) {
     int windowIndex = timeline.getPeriodByUid(periodUid, period).windowIndex;
     if (oldFrontPeriodUid != null) {
       int oldFrontPeriodIndex = timeline.getIndexOfPeriod(oldFrontPeriodUid);
@@ -533,10 +481,8 @@ import com.google.common.collect.ImmutableList;
   /**
    * Updates the queue for any playback mode change, and returns whether the change was fully
    * handled. If not, it is necessary to seek to the current playback position.
-   *
-   * @param timeline The current timeline.
    */
-  private boolean updateForPlaybackModeChange(Timeline timeline) {
+  private boolean updateForPlaybackModeChange() {
     // Find the last existing period holder that matches the new period order.
     MediaPeriodHolder lastValidPeriodHolder = playing;
     if (lastValidPeriodHolder == null) {
@@ -568,7 +514,7 @@ import com.google.common.collect.ImmutableList;
     boolean readingPeriodRemoved = removeAfter(lastValidPeriodHolder);
 
     // Update the period info for the last holder, as it may now be the last period in the timeline.
-    lastValidPeriodHolder.info = getUpdatedMediaPeriodInfo(timeline, lastValidPeriodHolder.info);
+    lastValidPeriodHolder.info = getUpdatedMediaPeriodInfo(lastValidPeriodHolder.info);
 
     // If renderers may have read from a period that's been removed, it is necessary to restart.
     return !readingPeriodRemoved;
@@ -577,28 +523,22 @@ import com.google.common.collect.ImmutableList;
   /**
    * Returns the first {@link MediaPeriodInfo} to play, based on the specified playback position.
    */
-  @Nullable
   private MediaPeriodInfo getFirstMediaPeriodInfo(PlaybackInfo playbackInfo) {
     return getMediaPeriodInfo(
-        playbackInfo.timeline,
-        playbackInfo.periodId,
-        playbackInfo.requestedContentPositionUs,
-        playbackInfo.positionUs);
+        playbackInfo.periodId, playbackInfo.contentPositionUs, playbackInfo.startPositionUs);
   }
 
   /**
    * Returns the {@link MediaPeriodInfo} for the media period following {@code mediaPeriodHolder}'s
    * media period.
    *
-   * @param timeline The current timeline.
    * @param mediaPeriodHolder The media period holder.
    * @param rendererPositionUs The current renderer position in microseconds.
    * @return The following media period's info, or {@code null} if it is not yet possible to get the
    *     next media period info.
    */
-  @Nullable
-  private MediaPeriodInfo getFollowingMediaPeriodInfo(
-      Timeline timeline, MediaPeriodHolder mediaPeriodHolder, long rendererPositionUs) {
+  private @Nullable MediaPeriodInfo getFollowingMediaPeriodInfo(
+      MediaPeriodHolder mediaPeriodHolder, long rendererPositionUs) {
     // TODO: This method is called repeatedly from ExoPlayerImplInternal.maybeUpdateLoadingPeriod
     // but if the timeline is not ready to provide the next period it can't return a non-null value
     // until the timeline is updated. Store whether the next timeline period is ready when the
@@ -630,14 +570,13 @@ import com.google.common.collect.ImmutableList;
         // want it to be from its default start position, so project the default start position
         // forward by the duration of the buffer, and start buffering from this point.
         contentPositionUs = C.TIME_UNSET;
-        @Nullable
         Pair<Object, Long> defaultPosition =
             timeline.getPeriodPosition(
                 window,
                 period,
                 nextWindowIndex,
                 /* windowPositionUs= */ C.TIME_UNSET,
-                /* defaultPositionProjectionUs= */ max(0, bufferedDurationUs));
+                /* defaultPositionProjectionUs= */ Math.max(0, bufferedDurationUs));
         if (defaultPosition == null) {
           return null;
         }
@@ -655,9 +594,8 @@ import com.google.common.collect.ImmutableList;
         contentPositionUs = 0;
       }
       MediaPeriodId periodId =
-          resolveMediaPeriodIdForAds(
-              timeline, nextPeriodUid, startPositionUs, windowSequenceNumber, period);
-      return getMediaPeriodInfo(timeline, periodId, contentPositionUs, startPositionUs);
+          resolveMediaPeriodIdForAds(nextPeriodUid, startPositionUs, windowSequenceNumber);
+      return getMediaPeriodInfo(periodId, contentPositionUs, startPositionUs);
     }
 
     MediaPeriodId currentPeriodId = mediaPeriodInfo.id;
@@ -672,85 +610,76 @@ import com.google.common.collect.ImmutableList;
           period.getNextAdIndexToPlay(adGroupIndex, currentPeriodId.adIndexInAdGroup);
       if (nextAdIndexInAdGroup < adCountInCurrentAdGroup) {
         // Play the next ad in the ad group if it's available.
-        return getMediaPeriodInfoForAd(
-            timeline,
-            currentPeriodId.periodUid,
-            adGroupIndex,
-            nextAdIndexInAdGroup,
-            mediaPeriodInfo.requestedContentPositionUs,
-            currentPeriodId.windowSequenceNumber);
+        return !period.isAdAvailable(adGroupIndex, nextAdIndexInAdGroup)
+            ? null
+            : getMediaPeriodInfoForAd(
+                currentPeriodId.periodUid,
+                adGroupIndex,
+                nextAdIndexInAdGroup,
+                mediaPeriodInfo.contentPositionUs,
+                currentPeriodId.windowSequenceNumber);
       } else {
         // Play content from the ad group position.
-        long startPositionUs = mediaPeriodInfo.requestedContentPositionUs;
+        long startPositionUs = mediaPeriodInfo.contentPositionUs;
         if (startPositionUs == C.TIME_UNSET) {
           // If we're transitioning from an ad group to content starting from its default position,
           // project the start position forward as if this were a transition to a new window.
-          @Nullable
           Pair<Object, Long> defaultPosition =
               timeline.getPeriodPosition(
                   window,
                   period,
                   period.windowIndex,
                   /* windowPositionUs= */ C.TIME_UNSET,
-                  /* defaultPositionProjectionUs= */ max(0, bufferedDurationUs));
+                  /* defaultPositionProjectionUs= */ Math.max(0, bufferedDurationUs));
           if (defaultPosition == null) {
             return null;
           }
           startPositionUs = defaultPosition.second;
         }
         return getMediaPeriodInfoForContent(
-            timeline,
-            currentPeriodId.periodUid,
-            startPositionUs,
-            mediaPeriodInfo.requestedContentPositionUs,
-            currentPeriodId.windowSequenceNumber);
+            currentPeriodId.periodUid, startPositionUs, currentPeriodId.windowSequenceNumber);
       }
     } else {
-      // Play the next ad group if it's still available.
-      int adIndexInAdGroup = period.getFirstAdIndexToPlay(currentPeriodId.nextAdGroupIndex);
-      if (adIndexInAdGroup == period.getAdCountInAdGroup(currentPeriodId.nextAdGroupIndex)) {
-        // The next ad group has no ads left to play. Play content from the end position instead.
+      // Play the next ad group if it's available.
+      int nextAdGroupIndex = period.getAdGroupIndexForPositionUs(mediaPeriodInfo.endPositionUs);
+      if (nextAdGroupIndex == C.INDEX_UNSET) {
+        // The next ad group can't be played. Play content from the previous end position instead.
         return getMediaPeriodInfoForContent(
-            timeline,
             currentPeriodId.periodUid,
             /* startPositionUs= */ mediaPeriodInfo.durationUs,
-            /* requestedContentPositionUs= */ mediaPeriodInfo.durationUs,
             currentPeriodId.windowSequenceNumber);
       }
-      return getMediaPeriodInfoForAd(
-          timeline,
-          currentPeriodId.periodUid,
-          currentPeriodId.nextAdGroupIndex,
-          adIndexInAdGroup,
-          /* contentPositionUs= */ mediaPeriodInfo.durationUs,
-          currentPeriodId.windowSequenceNumber);
+      int adIndexInAdGroup = period.getFirstAdIndexToPlay(nextAdGroupIndex);
+      return !period.isAdAvailable(nextAdGroupIndex, adIndexInAdGroup)
+          ? null
+          : getMediaPeriodInfoForAd(
+              currentPeriodId.periodUid,
+              nextAdGroupIndex,
+              adIndexInAdGroup,
+              /* contentPositionUs= */ mediaPeriodInfo.durationUs,
+              currentPeriodId.windowSequenceNumber);
     }
   }
 
-  @Nullable
   private MediaPeriodInfo getMediaPeriodInfo(
-      Timeline timeline, MediaPeriodId id, long requestedContentPositionUs, long startPositionUs) {
+      MediaPeriodId id, long contentPositionUs, long startPositionUs) {
     timeline.getPeriodByUid(id.periodUid, period);
     if (id.isAd()) {
+      if (!period.isAdAvailable(id.adGroupIndex, id.adIndexInAdGroup)) {
+        return null;
+      }
       return getMediaPeriodInfoForAd(
-          timeline,
           id.periodUid,
           id.adGroupIndex,
           id.adIndexInAdGroup,
-          requestedContentPositionUs,
+          contentPositionUs,
           id.windowSequenceNumber);
     } else {
-      return getMediaPeriodInfoForContent(
-          timeline,
-          id.periodUid,
-          startPositionUs,
-          requestedContentPositionUs,
-          id.windowSequenceNumber);
+      return getMediaPeriodInfoForContent(id.periodUid, startPositionUs, id.windowSequenceNumber);
     }
   }
 
   private MediaPeriodInfo getMediaPeriodInfoForAd(
-      Timeline timeline,
       Object periodUid,
       int adGroupIndex,
       int adIndexInAdGroup,
@@ -766,10 +695,6 @@ import com.google.common.collect.ImmutableList;
         adIndexInAdGroup == period.getFirstAdIndexToPlay(adGroupIndex)
             ? period.getAdResumePositionUs()
             : 0;
-    if (durationUs != C.TIME_UNSET && startPositionUs >= durationUs) {
-      // Ensure start position doesn't exceed duration.
-      startPositionUs = max(0, durationUs - 1);
-    }
     return new MediaPeriodInfo(
         id,
         startPositionUs,
@@ -777,22 +702,15 @@ import com.google.common.collect.ImmutableList;
         /* endPositionUs= */ C.TIME_UNSET,
         durationUs,
         /* isLastInTimelinePeriod= */ false,
-        /* isLastInTimelineWindow= */ false,
         /* isFinal= */ false);
   }
 
   private MediaPeriodInfo getMediaPeriodInfoForContent(
-      Timeline timeline,
-      Object periodUid,
-      long startPositionUs,
-      long requestedContentPositionUs,
-      long windowSequenceNumber) {
-    timeline.getPeriodByUid(periodUid, period);
+      Object periodUid, long startPositionUs, long windowSequenceNumber) {
     int nextAdGroupIndex = period.getAdGroupIndexAfterPositionUs(startPositionUs);
     MediaPeriodId id = new MediaPeriodId(periodUid, windowSequenceNumber, nextAdGroupIndex);
     boolean isLastInPeriod = isLastInPeriod(id);
-    boolean isLastInWindow = isLastInWindow(timeline, id);
-    boolean isLastInTimeline = isLastInTimeline(timeline, id, isLastInPeriod);
+    boolean isLastInTimeline = isLastInTimeline(id, isLastInPeriod);
     long endPositionUs =
         nextAdGroupIndex != C.INDEX_UNSET
             ? period.getAdGroupTimeUs(nextAdGroupIndex)
@@ -801,18 +719,13 @@ import com.google.common.collect.ImmutableList;
         endPositionUs == C.TIME_UNSET || endPositionUs == C.TIME_END_OF_SOURCE
             ? period.durationUs
             : endPositionUs;
-    if (durationUs != C.TIME_UNSET && startPositionUs >= durationUs) {
-      // Ensure start position doesn't exceed duration.
-      startPositionUs = max(0, durationUs - 1);
-    }
     return new MediaPeriodInfo(
         id,
         startPositionUs,
-        requestedContentPositionUs,
+        /* contentPositionUs= */ C.TIME_UNSET,
         endPositionUs,
         durationUs,
         isLastInPeriod,
-        isLastInWindow,
         isLastInTimeline);
   }
 
@@ -820,17 +733,7 @@ import com.google.common.collect.ImmutableList;
     return !id.isAd() && id.nextAdGroupIndex == C.INDEX_UNSET;
   }
 
-  private boolean isLastInWindow(Timeline timeline, MediaPeriodId id) {
-    if (!isLastInPeriod(id)) {
-      return false;
-    }
-    int windowIndex = timeline.getPeriodByUid(id.periodUid, period).windowIndex;
-    int periodIndex = timeline.getIndexOfPeriod(id.periodUid);
-    return timeline.getWindow(windowIndex, window).lastPeriodIndex == periodIndex;
-  }
-
-  private boolean isLastInTimeline(
-      Timeline timeline, MediaPeriodId id, boolean isLastMediaPeriodInPeriod) {
+  private boolean isLastInTimeline(MediaPeriodId id, boolean isLastMediaPeriodInPeriod) {
     int periodIndex = timeline.getIndexOfPeriod(id.periodUid);
     int windowIndex = timeline.getPeriod(periodIndex, period).windowIndex;
     return !timeline.getWindow(windowIndex, window).isDynamic

@@ -17,19 +17,29 @@ package com.google.android.exoplayer2;
 
 import androidx.annotation.Nullable;
 
-/** The configuration of a {@link Renderer}. */
+/**
+ * The configuration of a {@link Renderer}.
+ */
 public final class RendererConfiguration {
 
-  /** The default configuration. */
+  /**
+   * The default configuration.
+   */
   public static final RendererConfiguration DEFAULT =
-      new RendererConfiguration(/* tunneling= */ false);
+      new RendererConfiguration(C.AUDIO_SESSION_ID_UNSET);
 
-  /** Whether to enable tunneling. */
-  public final boolean tunneling;
+  /**
+   * The audio session id to use for tunneling, or {@link C#AUDIO_SESSION_ID_UNSET} if tunneling
+   * should not be enabled.
+   */
+  public final int tunnelingAudioSessionId;
 
-  /** @param tunneling Whether to enable tunneling. */
-  public RendererConfiguration(boolean tunneling) {
-    this.tunneling = tunneling;
+  /**
+   * @param tunnelingAudioSessionId The audio session id to use for tunneling, or
+   *     {@link C#AUDIO_SESSION_ID_UNSET} if tunneling should not be enabled.
+   */
+  public RendererConfiguration(int tunnelingAudioSessionId) {
+    this.tunnelingAudioSessionId = tunnelingAudioSessionId;
   }
 
   @Override
@@ -41,11 +51,12 @@ public final class RendererConfiguration {
       return false;
     }
     RendererConfiguration other = (RendererConfiguration) obj;
-    return tunneling == other.tunneling;
+    return tunnelingAudioSessionId == other.tunnelingAudioSessionId;
   }
 
   @Override
   public int hashCode() {
-    return tunneling ? 0 : 1;
+    return tunnelingAudioSessionId;
   }
+
 }

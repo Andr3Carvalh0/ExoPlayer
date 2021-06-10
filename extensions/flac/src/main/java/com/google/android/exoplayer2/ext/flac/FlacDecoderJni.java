@@ -15,15 +15,13 @@
  */
 package com.google.android.exoplayer2.ext.flac;
 
-import static java.lang.Math.min;
-
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ParserException;
 import com.google.android.exoplayer2.extractor.ExtractorInput;
-import com.google.android.exoplayer2.extractor.FlacStreamMetadata;
 import com.google.android.exoplayer2.extractor.SeekMap;
 import com.google.android.exoplayer2.extractor.SeekPoint;
+import com.google.android.exoplayer2.util.FlacStreamMetadata;
 import com.google.android.exoplayer2.util.Util;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -53,6 +51,12 @@ import java.nio.ByteBuffer;
   @Nullable private byte[] tempBuffer;
   private boolean endOfExtractorInput;
 
+  // the constructor does not initialize fields: tempBuffer
+  // call to flacInit() not allowed on the given receiver.
+  @SuppressWarnings({
+    "nullness:initialization.fields.uninitialized",
+    "nullness:method.invocation.invalid"
+  })
   public FlacDecoderJni() throws FlacDecoderException {
     if (!FlacLibrary.isAvailable()) {
       throw new FlacDecoderException("Failed to load decoder native libraries.");
@@ -117,10 +121,10 @@ import java.nio.ByteBuffer;
    *     read from the source, then 0 is returned.
    */
   @SuppressWarnings("unused") // Called from native code.
-  public int read(ByteBuffer target) throws IOException {
+  public int read(ByteBuffer target) throws IOException, InterruptedException {
     int byteCount = target.remaining();
     if (byteBufferData != null) {
-      byteCount = min(byteCount, byteBufferData.remaining());
+      byteCount = Math.min(byteCount, byteBufferData.remaining());
       int originalLimit = byteBufferData.limit();
       byteBufferData.limit(byteBufferData.position() + byteCount);
       target.put(byteBufferData);
@@ -128,7 +132,7 @@ import java.nio.ByteBuffer;
     } else if (extractorInput != null) {
       ExtractorInput extractorInput = this.extractorInput;
       byte[] tempBuffer = Util.castNonNull(this.tempBuffer);
-      byteCount = min(byteCount, TEMP_BUFFER_SIZE);
+      byteCount = Math.min(byteCount, TEMP_BUFFER_SIZE);
       int read = readFromExtractorInput(extractorInput, tempBuffer, /* offset= */ 0, byteCount);
       if (read < 4) {
         // Reading less than 4 bytes, most of the time, happens because of getting the bytes left in
@@ -147,7 +151,7 @@ import java.nio.ByteBuffer;
   }
 
   /** Decodes and consumes the metadata from the FLAC stream. */
-  public FlacStreamMetadata decodeStreamMetadata() throws IOException {
+  public FlacStreamMetadata decodeStreamMetadata() throws IOException, InterruptedException {
     FlacStreamMetadata streamMetadata = flacDecodeMetadata(nativeDecoderContext);
     if (streamMetadata == null) {
       throw new ParserException("Failed to decode stream metadata");
@@ -163,7 +167,7 @@ import java.nio.ByteBuffer;
    * @param retryPosition If any error happens, the input will be rewound to {@code retryPosition}.
    */
   public void decodeSampleWithBacktrackPosition(ByteBuffer output, long retryPosition)
-      throws IOException, FlacFrameDecodeException {
+      throws InterruptedException, IOException, FlacFrameDecodeException {
     try {
       decodeSample(output);
     } catch (IOException e) {
@@ -179,7 +183,8 @@ import java.nio.ByteBuffer;
 
   /** Decodes and consumes the next sample from the FLAC stream into the given byte buffer. */
   @SuppressWarnings("ByteBufferBackingArray")
-  public void decodeSample(ByteBuffer output) throws IOException, FlacFrameDecodeException {
+  public void decodeSample(ByteBuffer output)
+      throws IOException, InterruptedException, FlacFrameDecodeException {
     output.clear();
     int frameSize =
         output.isDirect()
@@ -267,7 +272,8 @@ import java.nio.ByteBuffer;
   }
 
   private int readFromExtractorInput(
-      ExtractorInput extractorInput, byte[] tempBuffer, int offset, int length) throws IOException {
+      ExtractorInput extractorInput, byte[] tempBuffer, int offset, int length)
+      throws IOException, InterruptedException {
     int read = extractorInput.read(tempBuffer, offset, length);
     if (read == C.RESULT_END_OF_INPUT) {
       endOfExtractorInput = true;
@@ -278,11 +284,14 @@ import java.nio.ByteBuffer;
 
   private native long flacInit();
 
-  private native FlacStreamMetadata flacDecodeMetadata(long context) throws IOException;
+  private native FlacStreamMetadata flacDecodeMetadata(long context)
+      throws IOException, InterruptedException;
 
-  private native int flacDecodeToBuffer(long context, ByteBuffer outputBuffer) throws IOException;
+  private native int flacDecodeToBuffer(long context, ByteBuffer outputBuffer)
+      throws IOException, InterruptedException;
 
-  private native int flacDecodeToArray(long context, byte[] outputArray) throws IOException;
+  private native int flacDecodeToArray(long context, byte[] outputArray)
+      throws IOException, InterruptedException;
 
   private native long flacGetDecodePosition(long context);
 

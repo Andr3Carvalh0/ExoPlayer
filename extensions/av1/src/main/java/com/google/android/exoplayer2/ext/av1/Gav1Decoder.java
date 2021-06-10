@@ -15,14 +15,9 @@
  */
 package com.google.android.exoplayer2.ext.av1;
 
-import static androidx.annotation.VisibleForTesting.PACKAGE_PRIVATE;
-import static java.lang.Runtime.getRuntime;
-
 import android.view.Surface;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.decoder.SimpleDecoder;
 import com.google.android.exoplayer2.util.Util;
 import com.google.android.exoplayer2.video.VideoDecoderInputBuffer;
@@ -30,8 +25,7 @@ import com.google.android.exoplayer2.video.VideoDecoderOutputBuffer;
 import java.nio.ByteBuffer;
 
 /** Gav1 decoder. */
-@VisibleForTesting(otherwise = PACKAGE_PRIVATE)
-public final class Gav1Decoder
+/* package */ final class Gav1Decoder
     extends SimpleDecoder<VideoDecoderInputBuffer, VideoDecoderOutputBuffer, Gav1DecoderException> {
 
   // LINT.IfChange
@@ -50,9 +44,7 @@ public final class Gav1Decoder
    * @param numInputBuffers Number of input buffers.
    * @param numOutputBuffers Number of output buffers.
    * @param initialInputBufferSize The initial size of each input buffer, in bytes.
-   * @param threads Number of threads libgav1 will use to decode. If {@link
-   *     Libgav1VideoRenderer#THREAD_COUNT_AUTODETECT} is passed, then this class will auto detect
-   *     the number of threads to be used.
+   * @param threads Number of threads libgav1 will use to decode.
    * @throws Gav1DecoderException Thrown if an exception occurs when initializing the decoder.
    */
   public Gav1Decoder(
@@ -64,16 +56,6 @@ public final class Gav1Decoder
     if (!Gav1Library.isAvailable()) {
       throw new Gav1DecoderException("Failed to load decoder native library.");
     }
-
-    if (threads == Libgav1VideoRenderer.THREAD_COUNT_AUTODETECT) {
-      // Try to get the optimal number of threads from the AV1 heuristic.
-      threads = gav1GetThreads();
-      if (threads <= 0) {
-        // If that is not available, default to the number of available processors.
-        threads = getRuntime().availableProcessors();
-      }
-    }
-
     gav1DecoderContext = gav1Init(threads);
     if (gav1DecoderContext == GAV1_ERROR || gav1CheckError(gav1DecoderContext) == GAV1_ERROR) {
       throw new Gav1DecoderException(
@@ -87,9 +69,18 @@ public final class Gav1Decoder
     return "libgav1";
   }
 
+  /**
+   * Sets the output mode for frames rendered by the decoder.
+   *
+   * @param outputMode The output mode.
+   */
+  public void setOutputMode(@C.VideoOutputMode int outputMode) {
+    this.outputMode = outputMode;
+  }
+
   @Override
   protected VideoDecoderInputBuffer createInputBuffer() {
-    return new VideoDecoderInputBuffer(DecoderInputBuffer.BUFFER_REPLACEMENT_MODE_DIRECT);
+    return new VideoDecoderInputBuffer();
   }
 
   @Override
@@ -97,8 +88,8 @@ public final class Gav1Decoder
     return new VideoDecoderOutputBuffer(this::releaseOutputBuffer);
   }
 
-  @Override
   @Nullable
+  @Override
   protected Gav1DecoderException decode(
       VideoDecoderInputBuffer inputBuffer, VideoDecoderOutputBuffer outputBuffer, boolean reset) {
     ByteBuffer inputData = Util.castNonNull(inputBuffer.data);
@@ -123,7 +114,7 @@ public final class Gav1Decoder
       outputBuffer.addFlag(C.BUFFER_FLAG_DECODE_ONLY);
     }
     if (!decodeOnly) {
-      outputBuffer.format = inputBuffer.format;
+      outputBuffer.colorInfo = inputBuffer.colorInfo;
     }
 
     return null;
@@ -148,15 +139,6 @@ public final class Gav1Decoder
       gav1ReleaseFrame(gav1DecoderContext, buffer);
     }
     super.releaseOutputBuffer(buffer);
-  }
-
-  /**
-   * Sets the output mode for frames rendered by the decoder.
-   *
-   * @param outputMode The output mode.
-   */
-  public void setOutputMode(@C.VideoOutputMode int outputMode) {
-    this.outputMode = outputMode;
   }
 
   /**
@@ -221,7 +203,7 @@ public final class Gav1Decoder
    * @param context Decoder context.
    * @param surface Output surface.
    * @param outputBuffer Output buffer with the decoded frame.
-   * @return {@link #GAV1_OK} if successful, {@link #GAV1_ERROR} if an error occurred.
+   * @return {@link #GAV1_OK} if successful, {@link #GAV1_ERROR} if an error occured.
    */
   private native int gav1RenderFrame(
       long context, Surface surface, VideoDecoderOutputBuffer outputBuffer);
@@ -243,17 +225,10 @@ public final class Gav1Decoder
   private native String gav1GetErrorMessage(long context);
 
   /**
-   * Returns whether an error occurred.
+   * Returns whether an error occured.
    *
    * @param context Decoder context.
-   * @return {@link #GAV1_OK} if there was no error, {@link #GAV1_ERROR} if an error occurred.
+   * @return {@link #GAV1_OK} if there was no error, {@link #GAV1_ERROR} if an error occured.
    */
   private native int gav1CheckError(long context);
-
-  /**
-   * Returns the optimal number of threads to be used for AV1 decoding.
-   *
-   * @return Optimal number of threads if there was no error, 0 if an error occurred.
-   */
-  private native int gav1GetThreads();
 }

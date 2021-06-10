@@ -34,68 +34,48 @@ public class TimedValueQueueTest {
   }
 
   @Test
-  public void bufferCapacityIncreasesAutomatically() {
+  public void testAddAndPollValues() {
+    queue.add(0, "a");
+    queue.add(1, "b");
+    queue.add(2, "c");
+    assertThat(queue.poll(0)).isEqualTo("a");
+    assertThat(queue.poll(1)).isEqualTo("b");
+    assertThat(queue.poll(2)).isEqualTo("c");
+  }
+
+  @Test
+  public void testBufferCapacityIncreasesAutomatically() {
     queue = new TimedValueQueue<>(1);
     for (int i = 0; i < 20; i++) {
       queue.add(i, "" + i);
       if ((i & 1) == 1) {
-        assertThat(queue.pollFirst()).isEqualTo("" + (i / 2));
+        assertThat(queue.poll(0)).isEqualTo("" + (i / 2));
       }
     }
     assertThat(queue.size()).isEqualTo(10);
   }
 
   @Test
-  public void timeDiscontinuityClearsValues() {
+  public void testTimeDiscontinuityClearsValues() {
     queue.add(1, "b");
     queue.add(2, "c");
     queue.add(0, "a");
     assertThat(queue.size()).isEqualTo(1);
-    assertThat(queue.pollFirst()).isEqualTo("a");
+    assertThat(queue.poll(0)).isEqualTo("a");
   }
 
   @Test
-  public void timeDiscontinuityOnFullBufferClearsValues() {
+  public void testTimeDiscontinuityOnFullBufferClearsValues() {
     queue = new TimedValueQueue<>(2);
     queue.add(1, "b");
     queue.add(3, "c");
     queue.add(2, "a");
     assertThat(queue.size()).isEqualTo(1);
-    assertThat(queue.pollFirst()).isEqualTo("a");
+    assertThat(queue.poll(2)).isEqualTo("a");
   }
 
   @Test
-  public void pollFirstReturnsValues() {
-    queue.add(0, "a");
-    queue.add(1, "b");
-    queue.add(2, "c");
-    assertThat(queue.pollFirst()).isEqualTo("a");
-    assertThat(queue.size()).isEqualTo(2);
-    assertThat(queue.pollFirst()).isEqualTo("b");
-    assertThat(queue.size()).isEqualTo(1);
-    assertThat(queue.pollFirst()).isEqualTo("c");
-    assertThat(queue.size()).isEqualTo(0);
-    assertThat(queue.pollFirst()).isEqualTo(null);
-    assertThat(queue.size()).isEqualTo(0);
-  }
-
-  @Test
-  public void pollReturnsValues() {
-    queue.add(0, "a");
-    queue.add(1, "b");
-    queue.add(2, "c");
-    assertThat(queue.poll(0)).isEqualTo("a");
-    assertThat(queue.size()).isEqualTo(2);
-    assertThat(queue.poll(1)).isEqualTo("b");
-    assertThat(queue.size()).isEqualTo(1);
-    assertThat(queue.poll(2)).isEqualTo("c");
-    assertThat(queue.size()).isEqualTo(0);
-    assertThat(queue.pollFirst()).isEqualTo(null);
-    assertThat(queue.size()).isEqualTo(0);
-  }
-
-  @Test
-  public void pollReturnsClosestValue() {
+  public void testPollReturnsClosestValue() {
     queue.add(0, "a");
     queue.add(3, "b");
     assertThat(queue.poll(2)).isEqualTo("b");
@@ -103,7 +83,7 @@ public class TimedValueQueueTest {
   }
 
   @Test
-  public void pollRemovesPreviousValues() {
+  public void testPollRemovesPreviousValues() {
     queue.add(0, "a");
     queue.add(1, "b");
     queue.add(2, "c");
@@ -112,7 +92,7 @@ public class TimedValueQueueTest {
   }
 
   @Test
-  public void pollFloorReturnsClosestPreviousValue() {
+  public void testPollFloorReturnsClosestPreviousValue() {
     queue.add(0, "a");
     queue.add(3, "b");
     assertThat(queue.pollFloor(2)).isEqualTo("a");
@@ -122,7 +102,7 @@ public class TimedValueQueueTest {
   }
 
   @Test
-  public void pollFloorRemovesPreviousValues() {
+  public void testPollFloorRemovesPreviousValues() {
     queue.add(0, "a");
     queue.add(1, "b");
     queue.add(2, "c");

@@ -15,16 +15,8 @@
  */
 package com.google.android.exoplayer2.playbacktests.gts;
 
-import android.app.Instrumentation;
-
 /** Metric logging interface for playback tests. */
 /* package */ interface MetricsLogger {
-
-  interface Factory {
-    MetricsLogger create(Instrumentation instrumentation, String tag, String streamName);
-  }
-
-  Factory DEFAULT_FACTORY = LogcatMetricsLogger.FACTORY;
 
   String KEY_FRAMES_DROPPED_COUNT = "frames_dropped_count";
   String KEY_FRAMES_RENDERED_COUNT = "frames_rendered_count";
@@ -61,4 +53,22 @@ import android.app.Instrumentation;
    * Closes the logger.
    */
   void close();
+
+  /**
+   * A factory for instantiating {@link MetricsLogger} instances.
+   */
+  final class Factory {
+
+    private Factory() {}
+
+    /**
+     * Obtains a new instance of {@link MetricsLogger}.
+     *
+     * @param tag The tag to be used for logcat logs.
+     */
+    public static MetricsLogger createDefault(String tag) {
+      return new LogcatMetricsLogger(tag);
+    }
+  }
+
 }

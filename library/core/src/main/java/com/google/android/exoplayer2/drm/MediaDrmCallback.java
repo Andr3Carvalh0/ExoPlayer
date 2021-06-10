@@ -19,7 +19,9 @@ import com.google.android.exoplayer2.drm.ExoMediaDrm.KeyRequest;
 import com.google.android.exoplayer2.drm.ExoMediaDrm.ProvisionRequest;
 import java.util.UUID;
 
-/** Performs {@link ExoMediaDrm} key and provisioning requests. */
+/**
+ * Performs {@link ExoMediaDrm} key and provisioning requests.
+ */
 public interface MediaDrmCallback {
 
   /**
@@ -28,10 +30,9 @@ public interface MediaDrmCallback {
    * @param uuid The UUID of the content protection scheme.
    * @param request The request.
    * @return The response data.
-   * @throws MediaDrmCallbackException If an error occurred executing the request.
+   * @throws Exception If an error occurred executing the request.
    */
-  byte[] executeProvisionRequest(UUID uuid, ProvisionRequest request)
-      throws MediaDrmCallbackException;
+  byte[] executeProvisionRequest(UUID uuid, ProvisionRequest request) throws Exception;
 
   /**
    * Executes a key request.
@@ -39,7 +40,7 @@ public interface MediaDrmCallback {
    * @param uuid The UUID of the content protection scheme.
    * @param request The request.
    * @return The response data.
-   * @throws MediaDrmCallbackException If an error occurred executing the request.
+   * @throws Exception If an error occurred executing the request.
    */
-  byte[] executeKeyRequest(UUID uuid, KeyRequest request) throws MediaDrmCallbackException;
+  byte[] executeKeyRequest(UUID uuid, KeyRequest request) throws Exception;
 }

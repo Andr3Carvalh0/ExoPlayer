@@ -15,11 +15,11 @@
  */
 package com.google.android.exoplayer2.source;
 
-import static java.lang.Math.min;
-
 import com.google.android.exoplayer2.C;
 
-/** A {@link SequenceableLoader} that encapsulates multiple other {@link SequenceableLoader}s. */
+/**
+ * A {@link SequenceableLoader} that encapsulates multiple other {@link SequenceableLoader}s.
+ */
 public class CompositeSequenceableLoader implements SequenceableLoader {
 
   protected final SequenceableLoader[] loaders;
@@ -34,7 +34,7 @@ public class CompositeSequenceableLoader implements SequenceableLoader {
     for (SequenceableLoader loader : loaders) {
       long loaderBufferedPositionUs = loader.getBufferedPositionUs();
       if (loaderBufferedPositionUs != C.TIME_END_OF_SOURCE) {
-        bufferedPositionUs = min(bufferedPositionUs, loaderBufferedPositionUs);
+        bufferedPositionUs = Math.min(bufferedPositionUs, loaderBufferedPositionUs);
       }
     }
     return bufferedPositionUs == Long.MAX_VALUE ? C.TIME_END_OF_SOURCE : bufferedPositionUs;
@@ -46,7 +46,7 @@ public class CompositeSequenceableLoader implements SequenceableLoader {
     for (SequenceableLoader loader : loaders) {
       long loaderNextLoadPositionUs = loader.getNextLoadPositionUs();
       if (loaderNextLoadPositionUs != C.TIME_END_OF_SOURCE) {
-        nextLoadPositionUs = min(nextLoadPositionUs, loaderNextLoadPositionUs);
+        nextLoadPositionUs = Math.min(nextLoadPositionUs, loaderNextLoadPositionUs);
       }
     }
     return nextLoadPositionUs == Long.MAX_VALUE ? C.TIME_END_OF_SOURCE : nextLoadPositionUs;

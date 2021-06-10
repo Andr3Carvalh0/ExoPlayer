@@ -16,7 +16,8 @@
 package com.google.android.exoplayer2.source.dash.offline;
 
 import android.net.Uri;
-import com.google.common.base.Charsets;
+import com.google.android.exoplayer2.C;
+import java.nio.charset.Charset;
 
 /** Data for DASH downloading tests. */
 /* package */ interface DashDownloadTestData {
@@ -86,7 +87,7 @@ import com.google.common.base.Charsets;
               + "        </AdaptationSet>\n"
               + "    </Period>\n"
               + "</MPD>")
-          .getBytes(Charsets.UTF_8);
+          .getBytes(Charset.forName(C.UTF8_NAME));
 
   byte[] TEST_MPD_NO_INDEX =
       ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -99,5 +100,5 @@ import com.google.common.base.Charsets;
               + "        </AdaptationSet>\n"
               + "    </Period>\n"
               + "</MPD>")
-          .getBytes(Charsets.UTF_8);
+          .getBytes(Charset.forName(C.UTF8_NAME));
 }

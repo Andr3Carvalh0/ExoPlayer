@@ -15,66 +15,55 @@ more external libraries as described below. These are licensed separately.
 
 To use this extension you need to clone the ExoPlayer repository and depend on
 its modules locally. Instructions for doing this can be found in ExoPlayer's
-[top level README][]. The extension is not provided via Google's Maven
-repository (see [#2781][] for more information).
+[top level README][]. The extension is not provided via JCenter (see [#2781][]
+for more information).
 
-In addition, it's necessary to manually build the FFmpeg library, so that gradle
-can bundle the FFmpeg binaries in the APK:
+In addition, it's necessary to build the extension's native components as
+follows:
 
 * Set the following shell variable:
 
 ```
 cd "<path to exoplayer checkout>"
-EXOPLAYER_ROOT="$(pwd)"
-FFMPEG_EXT_PATH="${EXOPLAYER_ROOT}/extensions/ffmpeg/src/main"
+FFMPEG_EXT_PATH="$(pwd)/extensions/ffmpeg/src/main/jni"
 ```
 
 * Download the [Android NDK][] and set its location in a shell variable.
-  This build configuration has been tested on NDK r21.
+  This build configuration has been tested on NDK r20.
 
 ```
 NDK_PATH="<path to Android NDK>"
 ```
 
-* Set the host platform (use "darwin-x86_64" for Mac OS X):
+* Set up host platform ("darwin-x86_64" for Mac OS X):
 
 ```
 HOST_PLATFORM="linux-x86_64"
 ```
 
-* Fetch FFmpeg and checkout an appropriate branch. We cannot guarantee
-  compatibility with all versions of FFmpeg. We currently recommend version 4.2:
-
-```
-cd "<preferred location for ffmpeg>" && \
-git clone git://source.ffmpeg.org/ffmpeg && \
-cd ffmpeg && \
-git checkout release/4.2 && \
-FFMPEG_PATH="$(pwd)"
-```
-
-* Configure the decoders to include. See the [Supported formats][] page for
-  details of the available decoders, and which formats they support.
+* Configure the formats supported by adapting the following variable if needed
+  and by setting it. See the [Supported formats][] page for more details of the
+  formats.
 
 ```
 ENABLED_DECODERS=(vorbis opus flac)
 ```
 
-* Add a link to the FFmpeg source code in the FFmpeg extension `jni` directory.
+* Fetch and build FFmpeg. For example, executing script `build_ffmpeg.sh` will
+  fetch and build FFmpeg release 4.2 for armeabi-v7a, arm64-v8a and x86:
 
 ```
-cd "${FFMPEG_EXT_PATH}/jni" && \
-ln -s "$FFMPEG_PATH" ffmpeg
-```
-
-* Execute `build_ffmpeg.sh` to build FFmpeg for `armeabi-v7a`, `arm64-v8a`,
-  `x86` and `x86_64`. The script can be edited if you need to build for
-  different architectures:
-
-```
-cd "${FFMPEG_EXT_PATH}/jni" && \
+cd "${FFMPEG_EXT_PATH}" && \
 ./build_ffmpeg.sh \
   "${FFMPEG_EXT_PATH}" "${NDK_PATH}" "${HOST_PLATFORM}" "${ENABLED_DECODERS[@]}"
+```
+
+* Build the JNI native libraries, setting `APP_ABI` to include the architectures
+  built in the previous step. For example:
+
+```
+cd "${FFMPEG_EXT_PATH}" && \
+${NDK_PATH}/ndk-build APP_ABI="armeabi-v7a arm64-v8a x86" -j4
 ```
 
 ## Build instructions (Windows) ##

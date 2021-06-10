@@ -28,24 +28,23 @@ import static org.mockito.Mockito.when;
 import android.net.Uri;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.offline.DefaultDownloaderFactory;
 import com.google.android.exoplayer2.offline.DownloadException;
 import com.google.android.exoplayer2.offline.DownloadRequest;
 import com.google.android.exoplayer2.offline.Downloader;
+import com.google.android.exoplayer2.offline.DownloaderConstructorHelper;
 import com.google.android.exoplayer2.offline.DownloaderFactory;
 import com.google.android.exoplayer2.offline.StreamKey;
 import com.google.android.exoplayer2.testutil.CacheAsserts.RequestSet;
 import com.google.android.exoplayer2.testutil.FakeDataSet;
 import com.google.android.exoplayer2.testutil.FakeDataSource;
+import com.google.android.exoplayer2.testutil.FakeDataSource.Factory;
 import com.google.android.exoplayer2.testutil.TestUtil;
 import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.upstream.DummyDataSource;
 import com.google.android.exoplayer2.upstream.cache.Cache;
-import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.NoOpCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
-import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
 import java.io.File;
 import java.io.IOException;
@@ -71,8 +70,7 @@ public class DashDownloaderTest {
     MockitoAnnotations.initMocks(this);
     tempFolder =
         Util.createTempDirectory(ApplicationProvider.getApplicationContext(), "ExoPlayerTest");
-    cache =
-        new SimpleCache(tempFolder, new NoOpCacheEvictor(), TestUtil.getInMemoryDatabaseProvider());
+    cache = new SimpleCache(tempFolder, new NoOpCacheEvictor());
     progressListener = new ProgressListener();
   }
 
@@ -82,27 +80,25 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void createWithDefaultDownloaderFactory() {
-    CacheDataSource.Factory cacheDataSourceFactory =
-        new CacheDataSource.Factory()
-            .setCache(Mockito.mock(Cache.class))
-            .setUpstreamDataSourceFactory(DummyDataSource.FACTORY);
-    DownloaderFactory factory =
-        new DefaultDownloaderFactory(cacheDataSourceFactory, /* executor= */ Runnable::run);
+  public void testCreateWithDefaultDownloaderFactory() {
+    DownloaderConstructorHelper constructorHelper =
+        new DownloaderConstructorHelper(Mockito.mock(Cache.class), DummyDataSource.FACTORY);
+    DownloaderFactory factory = new DefaultDownloaderFactory(constructorHelper);
 
     Downloader downloader =
         factory.createDownloader(
-            new DownloadRequest.Builder(/* id= */ "id", Uri.parse("https://www.test.com/download"))
-                .setMimeType(MimeTypes.APPLICATION_MPD)
-                .setStreamKeys(
-                    Collections.singletonList(
-                        new StreamKey(/* groupIndex= */ 0, /* trackIndex= */ 0)))
-                .build());
+            new DownloadRequest(
+                "id",
+                DownloadRequest.TYPE_DASH,
+                Uri.parse("https://www.test.com/download"),
+                Collections.singletonList(new StreamKey(/* groupIndex= */ 0, /* trackIndex= */ 0)),
+                /* customCacheKey= */ null,
+                /* data= */ null));
     assertThat(downloader).isInstanceOf(DashDownloader.class);
   }
 
   @Test
-  public void downloadRepresentation() throws Exception {
+  public void testDownloadRepresentation() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -117,7 +113,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void downloadRepresentationInSmallParts() throws Exception {
+  public void testDownloadRepresentationInSmallParts() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -136,7 +132,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void downloadRepresentations() throws Exception {
+  public void testDownloadRepresentations() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -155,7 +151,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void downloadAllRepresentations() throws Exception {
+  public void testDownloadAllRepresentations() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -176,7 +172,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void progressiveDownload() throws Exception {
+  public void testProgressiveDownload() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -188,7 +184,7 @@ public class DashDownloaderTest {
             .setRandomData("text_segment_2", 2)
             .setRandomData("text_segment_3", 3);
     FakeDataSource fakeDataSource = new FakeDataSource(fakeDataSet);
-    FakeDataSource.Factory factory = mock(FakeDataSource.Factory.class);
+    Factory factory = mock(Factory.class);
     when(factory.createDataSource()).thenReturn(fakeDataSource);
 
     DashDownloader dashDownloader =
@@ -208,7 +204,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void progressiveDownloadSeparatePeriods() throws Exception {
+  public void testProgressiveDownloadSeparatePeriods() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -220,7 +216,7 @@ public class DashDownloaderTest {
             .setRandomData("period_2_segment_2", 2)
             .setRandomData("period_2_segment_3", 3);
     FakeDataSource fakeDataSource = new FakeDataSource(fakeDataSet);
-    FakeDataSource.Factory factory = mock(FakeDataSource.Factory.class);
+    Factory factory = mock(Factory.class);
     when(factory.createDataSource()).thenReturn(fakeDataSource);
 
     DashDownloader dashDownloader =
@@ -240,7 +236,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void downloadRepresentationFailure() throws Exception {
+  public void testDownloadRepresentationFailure() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -265,7 +261,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void counters() throws Exception {
+  public void testCounters() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -293,7 +289,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void remove() throws Exception {
+  public void testRemove() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD)
@@ -313,7 +309,7 @@ public class DashDownloaderTest {
   }
 
   @Test
-  public void representationWithoutIndex() throws Exception {
+  public void testRepresentationWithoutIndex() throws Exception {
     FakeDataSet fakeDataSet =
         new FakeDataSet()
             .setData(TEST_MPD_URI, TEST_MPD_NO_INDEX)
@@ -331,18 +327,12 @@ public class DashDownloaderTest {
   }
 
   private DashDownloader getDashDownloader(FakeDataSet fakeDataSet, StreamKey... keys) {
-    return getDashDownloader(new FakeDataSource.Factory().setFakeDataSet(fakeDataSet), keys);
+    return getDashDownloader(new Factory().setFakeDataSet(fakeDataSet), keys);
   }
 
-  private DashDownloader getDashDownloader(
-      FakeDataSource.Factory upstreamDataSourceFactory, StreamKey... keys) {
-    CacheDataSource.Factory cacheDataSourceFactory =
-        new CacheDataSource.Factory()
-            .setCache(cache)
-            .setUpstreamDataSourceFactory(upstreamDataSourceFactory);
+  private DashDownloader getDashDownloader(Factory factory, StreamKey... keys) {
     return new DashDownloader(
-        new MediaItem.Builder().setUri(TEST_MPD_URI).setStreamKeys(keysList(keys)).build(),
-        cacheDataSourceFactory);
+        TEST_MPD_URI, keysList(keys), new DownloaderConstructorHelper(cache, factory));
   }
 
   private static ArrayList<StreamKey> keysList(StreamKey... keys) {

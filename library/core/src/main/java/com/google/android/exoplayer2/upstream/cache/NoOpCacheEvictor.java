@@ -15,11 +15,12 @@
  */
 package com.google.android.exoplayer2.upstream.cache;
 
+
 /**
  * Evictor that doesn't ever evict cache files.
  *
- * <p>Warning: Using this evictor might have unforeseeable consequences if cache size is not managed
- * elsewhere.
+ * Warning: Using this evictor might have unforeseeable consequences if cache
+ * size is not managed elsewhere.
  */
 public final class NoOpCacheEvictor implements CacheEvictor {
 

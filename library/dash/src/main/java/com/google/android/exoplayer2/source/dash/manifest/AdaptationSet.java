@@ -18,7 +18,9 @@ package com.google.android.exoplayer2.source.dash.manifest;
 import java.util.Collections;
 import java.util.List;
 
-/** Represents a set of interchangeable encoded versions of a media content component. */
+/**
+ * Represents a set of interchangeable encoded versions of a media content component.
+ */
 public class AdaptationSet {
 
   /**
@@ -48,10 +50,9 @@ public class AdaptationSet {
    */
   public final List<Descriptor> accessibilityDescriptors;
 
-  /** Essential properties in the adaptation set. */
-  public final List<Descriptor> essentialProperties;
-
-  /** Supplemental properties in the adaptation set. */
+  /**
+   * Supplemental properties in the adaptation set.
+   */
   public final List<Descriptor> supplementalProperties;
 
   /**
@@ -61,21 +62,21 @@ public class AdaptationSet {
    *     {@code TRACK_TYPE_*} constants.
    * @param representations {@link Representation}s in the adaptation set.
    * @param accessibilityDescriptors Accessibility descriptors in the adaptation set.
-   * @param essentialProperties Essential properties in the adaptation set.
    * @param supplementalProperties Supplemental properties in the adaptation set.
    */
-  public AdaptationSet(
-      int id,
-      int type,
-      List<Representation> representations,
-      List<Descriptor> accessibilityDescriptors,
-      List<Descriptor> essentialProperties,
-      List<Descriptor> supplementalProperties) {
+  public AdaptationSet(int id, int type, List<Representation> representations,
+      List<Descriptor> accessibilityDescriptors, List<Descriptor> supplementalProperties) {
     this.id = id;
     this.type = type;
     this.representations = Collections.unmodifiableList(representations);
-    this.accessibilityDescriptors = Collections.unmodifiableList(accessibilityDescriptors);
-    this.essentialProperties = Collections.unmodifiableList(essentialProperties);
-    this.supplementalProperties = Collections.unmodifiableList(supplementalProperties);
+    this.accessibilityDescriptors =
+        accessibilityDescriptors == null
+            ? Collections.emptyList()
+            : Collections.unmodifiableList(accessibilityDescriptors);
+    this.supplementalProperties =
+        supplementalProperties == null
+            ? Collections.emptyList()
+            : Collections.unmodifiableList(supplementalProperties);
   }
+
 }

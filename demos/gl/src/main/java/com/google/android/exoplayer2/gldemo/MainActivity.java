@@ -24,11 +24,11 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.drm.ExoMediaCrypto;
 import com.google.android.exoplayer2.drm.FrameworkMediaDrm;
 import com.google.android.exoplayer2.drm.HttpMediaDrmCallback;
 import com.google.android.exoplayer2.source.MediaSource;
@@ -50,8 +50,6 @@ import java.util.UUID;
  * postprocessing of the video content using GL.
  */
 public final class MainActivity extends Activity {
-
-  private static final String TAG = "MainActivity";
 
   private static final String DEFAULT_MEDIA_URI =
       "https://storage.googleapis.com/exoplayer-test-media-1/mkv/android-screens-lavf-56.36.100-aac-avc-main-1280x720.mkv";
@@ -139,12 +137,13 @@ public final class MainActivity extends Activity {
         ACTION_VIEW.equals(action)
             ? Assertions.checkNotNull(intent.getData())
             : Uri.parse(DEFAULT_MEDIA_URI);
-    DrmSessionManager drmSessionManager;
+    String userAgent = Util.getUserAgent(this, getString(R.string.application_name));
+    DrmSessionManager<ExoMediaCrypto> drmSessionManager;
     if (Util.SDK_INT >= 18 && intent.hasExtra(DRM_SCHEME_EXTRA)) {
       String drmScheme = Assertions.checkNotNull(intent.getStringExtra(DRM_SCHEME_EXTRA));
       String drmLicenseUrl = Assertions.checkNotNull(intent.getStringExtra(DRM_LICENSE_URL_EXTRA));
       UUID drmSchemeUuid = Assertions.checkNotNull(Util.getDrmUuid(drmScheme));
-      HttpDataSource.Factory licenseDataSourceFactory = new DefaultHttpDataSourceFactory();
+      HttpDataSource.Factory licenseDataSourceFactory = new DefaultHttpDataSourceFactory(userAgent);
       HttpMediaDrmCallback drmCallback =
           new HttpMediaDrmCallback(drmLicenseUrl, licenseDataSourceFactory);
       drmSessionManager =
@@ -152,31 +151,32 @@ public final class MainActivity extends Activity {
               .setUuidAndExoMediaDrmProvider(drmSchemeUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
               .build(drmCallback);
     } else {
-      drmSessionManager = DrmSessionManager.DRM_UNSUPPORTED;
+      drmSessionManager = DrmSessionManager.getDummyDrmSessionManager();
     }
 
-    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this);
+    DataSource.Factory dataSourceFactory =
+        new DefaultDataSourceFactory(
+            this, Util.getUserAgent(this, getString(R.string.application_name)));
     MediaSource mediaSource;
     @C.ContentType int type = Util.inferContentType(uri, intent.getStringExtra(EXTENSION_EXTRA));
     if (type == C.TYPE_DASH) {
       mediaSource =
           new DashMediaSource.Factory(dataSourceFactory)
               .setDrmSessionManager(drmSessionManager)
-              .createMediaSource(MediaItem.fromUri(uri));
+              .createMediaSource(uri);
     } else if (type == C.TYPE_OTHER) {
       mediaSource =
           new ProgressiveMediaSource.Factory(dataSourceFactory)
               .setDrmSessionManager(drmSessionManager)
-              .createMediaSource(MediaItem.fromUri(uri));
+              .createMediaSource(uri);
     } else {
       throw new IllegalStateException();
     }
 
     SimpleExoPlayer player = new SimpleExoPlayer.Builder(getApplicationContext()).build();
     player.setRepeatMode(Player.REPEAT_MODE_ALL);
-    player.setMediaSource(mediaSource);
-    player.prepare();
-    player.play();
+    player.prepare(mediaSource);
+    player.setPlayWhenReady(true);
     VideoProcessingGLSurfaceView videoProcessingGLSurfaceView =
         Assertions.checkNotNull(this.videoProcessingGLSurfaceView);
     videoProcessingGLSurfaceView.setVideoComponent(

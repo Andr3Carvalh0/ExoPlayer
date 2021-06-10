@@ -18,8 +18,7 @@ package com.google.android.exoplayer2.ext.cast;
 import android.net.Uri;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.MediaItem;
-import com.google.android.exoplayer2.util.Assertions;
+import com.google.android.exoplayer2.ext.cast.MediaItem.DrmConfiguration;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.MediaQueueItem;
@@ -44,26 +43,22 @@ public final class DefaultMediaItemConverter implements MediaItemConverter {
 
   @Override
   public MediaItem toMediaItem(MediaQueueItem item) {
-    // `item` came from `toMediaQueueItem()` so the custom JSON data must be set.
-    MediaInfo mediaInfo = item.getMedia();
-    Assertions.checkNotNull(mediaInfo);
-    return getMediaItem(Assertions.checkNotNull(mediaInfo.getCustomData()));
+    return getMediaItem(item.getMedia().getCustomData());
   }
 
   @Override
   public MediaQueueItem toMediaQueueItem(MediaItem item) {
-    Assertions.checkNotNull(item.playbackProperties);
-    if (item.playbackProperties.mimeType == null) {
+    if (item.mimeType == null) {
       throw new IllegalArgumentException("The item must specify its mimeType");
     }
     MediaMetadata metadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
-    if (item.mediaMetadata.title != null) {
-      metadata.putString(MediaMetadata.KEY_TITLE, item.mediaMetadata.title.toString());
+    if (item.title != null) {
+      metadata.putString(MediaMetadata.KEY_TITLE, item.title);
     }
     MediaInfo mediaInfo =
-        new MediaInfo.Builder(item.playbackProperties.uri.toString())
+        new MediaInfo.Builder(item.uri.toString())
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType(item.playbackProperties.mimeType)
+            .setContentType(item.mimeType)
             .setMetadata(metadata)
             .setCustomData(getCustomData(item))
             .build();
@@ -78,17 +73,14 @@ public final class DefaultMediaItemConverter implements MediaItemConverter {
       MediaItem.Builder builder = new MediaItem.Builder();
       builder.setUri(Uri.parse(mediaItemJson.getString(KEY_URI)));
       if (mediaItemJson.has(KEY_TITLE)) {
-        com.google.android.exoplayer2.MediaMetadata mediaMetadata =
-            new com.google.android.exoplayer2.MediaMetadata.Builder()
-                .setTitle(mediaItemJson.getString(KEY_TITLE))
-                .build();
-        builder.setMediaMetadata(mediaMetadata);
+        builder.setTitle(mediaItemJson.getString(KEY_TITLE));
       }
       if (mediaItemJson.has(KEY_MIME_TYPE)) {
         builder.setMimeType(mediaItemJson.getString(KEY_MIME_TYPE));
       }
       if (mediaItemJson.has(KEY_DRM_CONFIGURATION)) {
-        populateDrmConfiguration(mediaItemJson.getJSONObject(KEY_DRM_CONFIGURATION), builder);
+        builder.setDrmConfiguration(
+            getDrmConfiguration(mediaItemJson.getJSONObject(KEY_DRM_CONFIGURATION)));
       }
       return builder.build();
     } catch (JSONException e) {
@@ -96,26 +88,25 @@ public final class DefaultMediaItemConverter implements MediaItemConverter {
     }
   }
 
-  private static void populateDrmConfiguration(JSONObject json, MediaItem.Builder builder)
-      throws JSONException {
-    builder.setDrmUuid(UUID.fromString(json.getString(KEY_UUID)));
-    builder.setDrmLicenseUri(json.getString(KEY_LICENSE_URI));
+  private static DrmConfiguration getDrmConfiguration(JSONObject json) throws JSONException {
+    UUID uuid = UUID.fromString(json.getString(KEY_UUID));
+    Uri licenseUri = Uri.parse(json.getString(KEY_LICENSE_URI));
     JSONObject requestHeadersJson = json.getJSONObject(KEY_REQUEST_HEADERS);
     HashMap<String, String> requestHeaders = new HashMap<>();
     for (Iterator<String> iterator = requestHeadersJson.keys(); iterator.hasNext(); ) {
       String key = iterator.next();
       requestHeaders.put(key, requestHeadersJson.getString(key));
     }
-    builder.setDrmLicenseRequestHeaders(requestHeaders);
+    return new DrmConfiguration(uuid, licenseUri, requestHeaders);
   }
 
   // Serialization.
 
-  private static JSONObject getCustomData(MediaItem mediaItem) {
+  private static JSONObject getCustomData(MediaItem item) {
     JSONObject json = new JSONObject();
     try {
-      json.put(KEY_MEDIA_ITEM, getMediaItemJson(mediaItem));
-      @Nullable JSONObject playerConfigJson = getPlayerConfigJson(mediaItem);
+      json.put(KEY_MEDIA_ITEM, getMediaItemJson(item));
+      JSONObject playerConfigJson = getPlayerConfigJson(item);
       if (playerConfigJson != null) {
         json.put(KEY_PLAYER_CONFIG, playerConfigJson);
       }
@@ -125,21 +116,18 @@ public final class DefaultMediaItemConverter implements MediaItemConverter {
     return json;
   }
 
-  private static JSONObject getMediaItemJson(MediaItem mediaItem) throws JSONException {
-    Assertions.checkNotNull(mediaItem.playbackProperties);
+  private static JSONObject getMediaItemJson(MediaItem item) throws JSONException {
     JSONObject json = new JSONObject();
-    json.put(KEY_TITLE, mediaItem.mediaMetadata.title);
-    json.put(KEY_URI, mediaItem.playbackProperties.uri.toString());
-    json.put(KEY_MIME_TYPE, mediaItem.playbackProperties.mimeType);
-    if (mediaItem.playbackProperties.drmConfiguration != null) {
-      json.put(
-          KEY_DRM_CONFIGURATION,
-          getDrmConfigurationJson(mediaItem.playbackProperties.drmConfiguration));
+    json.put(KEY_URI, item.uri.toString());
+    json.put(KEY_TITLE, item.title);
+    json.put(KEY_MIME_TYPE, item.mimeType);
+    if (item.drmConfiguration != null) {
+      json.put(KEY_DRM_CONFIGURATION, getDrmConfigurationJson(item.drmConfiguration));
     }
     return json;
   }
 
-  private static JSONObject getDrmConfigurationJson(MediaItem.DrmConfiguration drmConfiguration)
+  private static JSONObject getDrmConfigurationJson(DrmConfiguration drmConfiguration)
       throws JSONException {
     JSONObject json = new JSONObject();
     json.put(KEY_UUID, drmConfiguration.uuid);
@@ -149,12 +137,11 @@ public final class DefaultMediaItemConverter implements MediaItemConverter {
   }
 
   @Nullable
-  private static JSONObject getPlayerConfigJson(MediaItem mediaItem) throws JSONException {
-    if (mediaItem.playbackProperties == null
-        || mediaItem.playbackProperties.drmConfiguration == null) {
+  private static JSONObject getPlayerConfigJson(MediaItem item) throws JSONException {
+    DrmConfiguration drmConfiguration = item.drmConfiguration;
+    if (drmConfiguration == null) {
       return null;
     }
-    MediaItem.DrmConfiguration drmConfiguration = mediaItem.playbackProperties.drmConfiguration;
 
     String drmScheme;
     if (C.WIDEVINE_UUID.equals(drmConfiguration.uuid)) {

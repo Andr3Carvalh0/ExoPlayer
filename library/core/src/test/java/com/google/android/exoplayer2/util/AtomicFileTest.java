@@ -50,14 +50,14 @@ public final class AtomicFileTest {
   }
 
   @Test
-  public void delete() throws Exception {
+  public void testDelete() throws Exception {
     assertThat(file.createNewFile()).isTrue();
     atomicFile.delete();
     assertThat(file.exists()).isFalse();
   }
 
   @Test
-  public void writeRead() throws Exception {
+  public void testWriteRead() throws Exception {
     OutputStream output = atomicFile.startWrite();
     output.write(5);
     atomicFile.endWrite(output);

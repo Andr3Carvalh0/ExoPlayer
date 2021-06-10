@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2016 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <com.google.android.exoplayer2.ui.views.AspectRatioFrameLayout
+      android:id="@+id/exo_content_frame"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center">
+
+    <!-- Video surface will be inserted as the first child of the content frame. -->
+
+    <View android:id="@+id/exo_shutter"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black" />
+
+    <com.google.android.exoplayer2.ui.views.CustomSpinner
+        android:id="@+id/exo_buffering"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:layout_gravity="center"/>
+
+  </com.google.android.exoplayer2.ui.views.AspectRatioFrameLayout>
+
+  <com.google.android.exoplayer2.ui.SubtitleView
+      android:id="@+id/exo_subtitles"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"/>
+
+  <TextView
+      android:id="@+id/exo_debug"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:gravity="center"
+      style="@style/KPNMetricRegular"
+      android:background="@color/transparent_background"
+      android:visibility="gone"
+      tools:visibility="visible"
+      android:textSize="17sp"
+      tools:text="Andre"
+      android:padding="16dp" />
+
+  <FrameLayout android:id="@+id/exo_ad_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"/>
+
+  <FrameLayout android:id="@+id/exo_overlay"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"/>
+
+  <View android:id="@+id/exo_controller_placeholder"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"/>
+
+  <androidx.constraintlayout.widget.ConstraintLayout
+      android:id="@+id/edges"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:alpha="0"
+      android:clickable="false"
+      android:visibility="gone"
+      tools:alpha="1"
+      tools:visibility="visible">
+
+    <View
+        android:id="@+id/top"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/edge_light"
+        android:background="@color/subtle_grey"
+        android:clickable="false"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <View
+        android:id="@+id/bottom"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/edge_light"
+        android:background="@color/subtle_grey"
+        android:clickable="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <View
+        android:id="@+id/left"
+        android:layout_width="@dimen/edge_light"
+        android:layout_height="0dp"
+        android:background="@color/subtle_grey"
+        android:clickable="false"
+        app:layout_constraintBottom_toTopOf="@+id/bottom"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <View
+        android:id="@+id/right"
+        android:layout_width="@dimen/edge_light"
+        android:layout_height="0dp"
+        android:background="@color/subtle_grey"
+        android:clickable="false"
+        app:layout_constraintBottom_toTopOf="@+id/bottom"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+  </androidx.constraintlayout.widget.ConstraintLayout>
+
+  <androidx.constraintlayout.widget.ConstraintLayout
+      android:layout_width="match_parent"
+      android:layout_height="32dp"
+      android:layout_centerHorizontal="true"
+      android:layout_marginTop="24dp"
+      android:clickable="false"
+      app:layout_constraintEnd_toEndOf="parent"
+      tools:background="@color/kpn_green"
+      app:layout_constraintStart_toStartOf="parent">
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/zoomMessage"
+        style="@style/KPNMetricRegular"
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:background="@drawable/zoom_background"
+        android:paddingStart="24dp"
+        android:paddingTop="6dp"
+        android:visibility="invisible"
+        android:paddingEnd="24dp"
+        android:paddingBottom="6dp"
+        android:text="Original"
+        android:textColor="@color/subtle_grey"
+        android:textSize="17sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible"
+        tools:alpha="1" />
+
+  </androidx.constraintlayout.widget.ConstraintLayout>
+
+  <androidx.constraintlayout.widget.ConstraintLayout
+      android:id="@+id/pictureInPictureError"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:background="@color/black_trans"
+      android:visibility="gone">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/pictureErrorIcon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:tint="@color/subtle_grey"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:srcCompat="@drawable/icon_warning" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/pictureErrorTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/parental_control_error"
+        android:textColor="@color/subtle_grey"
+        style="@style/KPNMetricRegular"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="@+id/pictureErrorIcon"
+        app:layout_constraintStart_toStartOf="@+id/pictureErrorIcon"
+        app:layout_constraintTop_toBottomOf="@+id/pictureErrorIcon" />
+
+  </androidx.constraintlayout.widget.ConstraintLayout>
+
+</merge>

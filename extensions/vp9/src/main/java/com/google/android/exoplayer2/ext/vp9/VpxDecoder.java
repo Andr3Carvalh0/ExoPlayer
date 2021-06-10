@@ -15,14 +15,10 @@
  */
 package com.google.android.exoplayer2.ext.vp9;
 
-import static androidx.annotation.VisibleForTesting.PACKAGE_PRIVATE;
-
 import android.view.Surface;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.decoder.CryptoInfo;
-import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.decoder.SimpleDecoder;
 import com.google.android.exoplayer2.drm.DecryptionException;
 import com.google.android.exoplayer2.drm.ExoMediaCrypto;
@@ -33,8 +29,7 @@ import com.google.android.exoplayer2.video.VideoDecoderOutputBuffer;
 import java.nio.ByteBuffer;
 
 /** Vpx decoder. */
-@VisibleForTesting(otherwise = PACKAGE_PRIVATE)
-public final class VpxDecoder
+/* package */ final class VpxDecoder
     extends SimpleDecoder<VideoDecoderInputBuffer, VideoDecoderOutputBuffer, VpxDecoderException> {
 
   // These constants should match the codes returned from vpxDecode and vpxSecureDecode functions in
@@ -91,9 +86,18 @@ public final class VpxDecoder
     return "libvpx" + VpxLibrary.getVersion();
   }
 
+  /**
+   * Sets the output mode for frames rendered by the decoder.
+   *
+   * @param outputMode The output mode.
+   */
+  public void setOutputMode(@C.VideoOutputMode int outputMode) {
+    this.outputMode = outputMode;
+  }
+
   @Override
   protected VideoDecoderInputBuffer createInputBuffer() {
-    return new VideoDecoderInputBuffer(DecoderInputBuffer.BUFFER_REPLACEMENT_MODE_DIRECT);
+    return new VideoDecoderInputBuffer();
   }
 
   @Override
@@ -128,20 +132,11 @@ public final class VpxDecoder
     ByteBuffer inputData = Util.castNonNull(inputBuffer.data);
     int inputSize = inputData.limit();
     CryptoInfo cryptoInfo = inputBuffer.cryptoInfo;
-    final long result =
-        inputBuffer.isEncrypted()
-            ? vpxSecureDecode(
-                vpxDecContext,
-                inputData,
-                inputSize,
-                exoMediaCrypto,
-                cryptoInfo.mode,
-                Assertions.checkNotNull(cryptoInfo.key),
-                Assertions.checkNotNull(cryptoInfo.iv),
-                cryptoInfo.numSubSamples,
-                cryptoInfo.numBytesOfClearData,
-                cryptoInfo.numBytesOfEncryptedData)
-            : vpxDecode(vpxDecContext, inputData, inputSize);
+    final long result = inputBuffer.isEncrypted()
+        ? vpxSecureDecode(vpxDecContext, inputData, inputSize, exoMediaCrypto,
+        cryptoInfo.mode, cryptoInfo.key, cryptoInfo.iv, cryptoInfo.numSubSamples,
+        cryptoInfo.numBytesOfClearData, cryptoInfo.numBytesOfEncryptedData)
+        : vpxDecode(vpxDecContext, inputData, inputSize);
     if (result != NO_ERROR) {
       if (result == DRM_ERROR) {
         String message = "Drm error: " + vpxGetErrorMessage(vpxDecContext);
@@ -175,7 +170,7 @@ public final class VpxDecoder
       } else if (getFrameResult == -1) {
         return new VpxDecoderException("Buffer initialization failed.");
       }
-      outputBuffer.format = inputBuffer.format;
+      outputBuffer.colorInfo = inputBuffer.colorInfo;
     }
     return null;
   }
@@ -185,15 +180,6 @@ public final class VpxDecoder
     super.release();
     lastSupplementalData = null;
     vpxClose(vpxDecContext);
-  }
-
-  /**
-   * Sets the output mode for frames rendered by the decoder.
-   *
-   * @param outputMode The output mode.
-   */
-  public void setOutputMode(@C.VideoOutputMode int outputMode) {
-    this.outputMode = outputMode;
   }
 
   /** Renders the outputBuffer to the surface. Used with OUTPUT_MODE_SURFACE_YUV only. */
@@ -220,8 +206,8 @@ public final class VpxDecoder
       byte[] key,
       byte[] iv,
       int numSubSamples,
-      @Nullable int[] numBytesOfClearData,
-      @Nullable int[] numBytesOfEncryptedData);
+      int[] numBytesOfClearData,
+      int[] numBytesOfEncryptedData);
 
   private native int vpxGetFrame(long context, VideoDecoderOutputBuffer outputBuffer);
 

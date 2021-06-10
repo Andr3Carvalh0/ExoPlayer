@@ -20,7 +20,9 @@ import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-/** Thrown when the requested DRM scheme is not supported. */
+/**
+ * Thrown when the requested DRM scheme is not supported.
+ */
 public final class UnsupportedDrmException extends Exception {
 
   /**

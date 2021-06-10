@@ -34,7 +34,7 @@ import java.util.zip.Inflater;
  *
  * <p>The decoder does not perform CRC checks at the moment.
  */
-/* package */ final class ProjectionDecoder {
+public final class ProjectionDecoder {
 
   private static final int TYPE_YTMP = 0x79746d70;
   private static final int TYPE_MSHP = 0x6d736870;
@@ -43,9 +43,9 @@ import java.util.zip.Inflater;
   private static final int TYPE_MESH = 0x6d657368;
   private static final int TYPE_PROJ = 0x70726f6a;
 
-  // Limits to prevent a bad file from creating an OOM situation. We don't expect a mesh to
+  // Sanity limits to prevent a bad file from creating an OOM situation. We don't expect a mesh to
   // exceed these limits.
-  private static final int MAX_COORDINATE_COUNT = 10_000;
+  private static final int MAX_COORDINATE_COUNT = 10000;
   private static final int MAX_VERTEX_COUNT = 32 * 1000;
   private static final int MAX_TRIANGLE_INDICES = 128 * 1000;
 
@@ -179,7 +179,7 @@ import java.util.zip.Inflater;
     final double log2 = Math.log(2.0);
     int coordinateCountSizeBits = (int) Math.ceil(Math.log(2.0 * coordinateCount) / log2);
 
-    ParsableBitArray bitInput = new ParsableBitArray(input.getData());
+    ParsableBitArray bitInput = new ParsableBitArray(input.data);
     bitInput.setPosition(input.getPosition() * 8);
     float[] vertices = new float[vertexCount * 5];
     int[] coordinateIndices = new int[5];

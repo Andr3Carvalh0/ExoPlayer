@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.upstream;
 
-import android.content.ContentResolver;
 import android.content.Context;
 import android.net.Uri;
 import androidx.annotation.Nullable;
@@ -39,9 +38,6 @@ import java.util.Map;
  *   <li>rawresource: For fetching data from a raw resource in the application's apk (e.g.
  *       rawresource:///resourceId, where rawResourceId is the integer identifier of the raw
  *       resource).
- *   <li>android.resource: For fetching data in the application's apk (e.g.
- *       android.resource:///resourceId or android.resource://resourceType/resourceName). See {@link
- *       RawResourceDataSource} for more information about the URI form.
  *   <li>content: For fetching data from a content URI (e.g. content://authority/path/123).
  *   <li>rtmp: For fetching data over RTMP. Only supported if the project using ExoPlayer has an
  *       explicit dependency on ExoPlayer's RTMP extension.
@@ -61,9 +57,7 @@ public final class DefaultDataSource implements DataSource {
   private static final String SCHEME_CONTENT = "content";
   private static final String SCHEME_RTMP = "rtmp";
   private static final String SCHEME_UDP = "udp";
-  private static final String SCHEME_DATA = DataSchemeDataSource.SCHEME_DATA;
   private static final String SCHEME_RAW = RawResourceDataSource.RAW_RESOURCE_SCHEME;
-  private static final String SCHEME_ANDROID_RESOURCE = ContentResolver.SCHEME_ANDROID_RESOURCE;
 
   private final Context context;
   private final List<TransferListener> transferListeners;
@@ -84,27 +78,11 @@ public final class DefaultDataSource implements DataSource {
    * Constructs a new instance, optionally configured to follow cross-protocol redirects.
    *
    * @param context A context.
-   */
-  public DefaultDataSource(Context context, boolean allowCrossProtocolRedirects) {
-    this(
-        context,
-        /* userAgent= */ null,
-        DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS,
-        DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
-        allowCrossProtocolRedirects);
-  }
-
-  /**
-   * Constructs a new instance, optionally configured to follow cross-protocol redirects.
-   *
-   * @param context A context.
-   * @param userAgent The user agent that will be used when requesting remote data, or {@code null}
-   *     to use the default user agent of the underlying platform.
+   * @param userAgent The User-Agent to use when requesting remote data.
    * @param allowCrossProtocolRedirects Whether cross-protocol redirects (i.e. redirects from HTTP
    *     to HTTPS and vice versa) are enabled when fetching remote data.
    */
-  public DefaultDataSource(
-      Context context, @Nullable String userAgent, boolean allowCrossProtocolRedirects) {
+  public DefaultDataSource(Context context, String userAgent, boolean allowCrossProtocolRedirects) {
     this(
         context,
         userAgent,
@@ -117,8 +95,7 @@ public final class DefaultDataSource implements DataSource {
    * Constructs a new instance, optionally configured to follow cross-protocol redirects.
    *
    * @param context A context.
-   * @param userAgent The user agent that will be used when requesting remote data, or {@code null}
-   *     to use the default user agent of the underlying platform.
+   * @param userAgent The User-Agent to use when requesting remote data.
    * @param connectTimeoutMillis The connection timeout that should be used when requesting remote
    *     data, in milliseconds. A timeout of zero is interpreted as an infinite timeout.
    * @param readTimeoutMillis The read timeout that should be used when requesting remote data, in
@@ -128,18 +105,18 @@ public final class DefaultDataSource implements DataSource {
    */
   public DefaultDataSource(
       Context context,
-      @Nullable String userAgent,
+      String userAgent,
       int connectTimeoutMillis,
       int readTimeoutMillis,
       boolean allowCrossProtocolRedirects) {
     this(
         context,
-        new DefaultHttpDataSource.Factory()
-            .setUserAgent(userAgent)
-            .setConnectTimeoutMs(connectTimeoutMillis)
-            .setReadTimeoutMs(readTimeoutMillis)
-            .setAllowCrossProtocolRedirects(allowCrossProtocolRedirects)
-            .createDataSource());
+        new DefaultHttpDataSource(
+            userAgent,
+            connectTimeoutMillis,
+            readTimeoutMillis,
+            allowCrossProtocolRedirects,
+            /* defaultRequestProperties= */ null));
   }
 
   /**
@@ -158,7 +135,6 @@ public final class DefaultDataSource implements DataSource {
 
   @Override
   public void addTransferListener(TransferListener transferListener) {
-    Assertions.checkNotNull(transferListener);
     baseDataSource.addTransferListener(transferListener);
     transferListeners.add(transferListener);
     maybeAddListenerToDataSource(fileDataSource, transferListener);
@@ -190,9 +166,9 @@ public final class DefaultDataSource implements DataSource {
       dataSource = getRtmpDataSource();
     } else if (SCHEME_UDP.equals(scheme)) {
       dataSource = getUdpDataSource();
-    } else if (SCHEME_DATA.equals(scheme)) {
+    } else if (DataSchemeDataSource.SCHEME_DATA.equals(scheme)) {
       dataSource = getDataSchemeDataSource();
-    } else if (SCHEME_RAW.equals(scheme) || SCHEME_ANDROID_RESOURCE.equals(scheme)) {
+    } else if (SCHEME_RAW.equals(scheme)) {
       dataSource = getRawResourceDataSource();
     } else {
       dataSource = baseDataSource;

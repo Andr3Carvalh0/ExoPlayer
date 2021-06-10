@@ -18,12 +18,14 @@ package com.google.android.exoplayer2.ext.okhttp;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.upstream.HttpDataSource;
 import com.google.android.exoplayer2.upstream.HttpDataSource.BaseFactory;
+import com.google.android.exoplayer2.upstream.HttpDataSource.Factory;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import okhttp3.CacheControl;
 import okhttp3.Call;
 
-/** @deprecated Use {@link OkHttpDataSource.Factory} instead. */
-@Deprecated
+/**
+ * A {@link Factory} that produces {@link OkHttpDataSource}.
+ */
 public final class OkHttpDataSourceFactory extends BaseFactory {
 
   private final Call.Factory callFactory;
@@ -32,18 +34,6 @@ public final class OkHttpDataSourceFactory extends BaseFactory {
   @Nullable private final CacheControl cacheControl;
 
   /**
-   * Creates an instance.
-   *
-   * @param callFactory A {@link Call.Factory} (typically an {@link okhttp3.OkHttpClient}) for use
-   *     by the sources created by the factory.
-   */
-  public OkHttpDataSourceFactory(Call.Factory callFactory) {
-    this(callFactory, /* userAgent= */ null, /* listener= */ null, /* cacheControl= */ null);
-  }
-
-  /**
-   * Creates an instance.
-   *
    * @param callFactory A {@link Call.Factory} (typically an {@link okhttp3.OkHttpClient}) for use
    *     by the sources created by the factory.
    * @param userAgent An optional User-Agent string.
@@ -53,8 +43,6 @@ public final class OkHttpDataSourceFactory extends BaseFactory {
   }
 
   /**
-   * Creates an instance.
-   *
    * @param callFactory A {@link Call.Factory} (typically an {@link okhttp3.OkHttpClient}) for use
    *     by the sources created by the factory.
    * @param userAgent An optional User-Agent string.
@@ -66,8 +54,6 @@ public final class OkHttpDataSourceFactory extends BaseFactory {
   }
 
   /**
-   * Creates an instance.
-   *
    * @param callFactory A {@link Call.Factory} (typically an {@link okhttp3.OkHttpClient}) for use
    *     by the sources created by the factory.
    * @param userAgent An optional User-Agent string.
@@ -79,8 +65,6 @@ public final class OkHttpDataSourceFactory extends BaseFactory {
   }
 
   /**
-   * Creates an instance.
-   *
    * @param callFactory A {@link Call.Factory} (typically an {@link okhttp3.OkHttpClient}) for use
    *     by the sources created by the factory.
    * @param userAgent An optional User-Agent string.
@@ -98,8 +82,6 @@ public final class OkHttpDataSourceFactory extends BaseFactory {
     this.cacheControl = cacheControl;
   }
 
-  // Calls deprecated constructor.
-  @SuppressWarnings("deprecation")
   @Override
   protected OkHttpDataSource createDataSourceInternal(
       HttpDataSource.RequestProperties defaultRequestProperties) {

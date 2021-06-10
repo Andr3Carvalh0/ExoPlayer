@@ -17,10 +17,11 @@ package com.google.android.exoplayer2.database;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.database.DatabaseUtils;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import androidx.annotation.IntDef;
-import com.google.android.exoplayer2.util.Util;
+import androidx.annotation.VisibleForTesting;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -39,8 +40,6 @@ public final class VersionTable {
   public static final int FEATURE_CACHE_CONTENT_METADATA = 1;
   /** Version of tables used for cache file metadata. */
   public static final int FEATURE_CACHE_FILE_METADATA = 2;
-  /** Version of tables used from external features. */
-  public static final int FEATURE_EXTERNAL = 1000;
 
   private static final String TABLE_NAME = DatabaseProvider.TABLE_PREFIX + "Versions";
 
@@ -68,12 +67,7 @@ public final class VersionTable {
 
   @Documented
   @Retention(RetentionPolicy.SOURCE)
-  @IntDef({
-    FEATURE_OFFLINE,
-    FEATURE_CACHE_CONTENT_METADATA,
-    FEATURE_CACHE_FILE_METADATA,
-    FEATURE_EXTERNAL
-  })
+  @IntDef({FEATURE_OFFLINE, FEATURE_CACHE_CONTENT_METADATA, FEATURE_CACHE_FILE_METADATA})
   private @interface Feature {}
 
   private VersionTable() {}
@@ -114,7 +108,7 @@ public final class VersionTable {
       SQLiteDatabase writableDatabase, @Feature int feature, String instanceUid)
       throws DatabaseIOException {
     try {
-      if (!Util.tableExists(writableDatabase, TABLE_NAME)) {
+      if (!tableExists(writableDatabase, TABLE_NAME)) {
         return;
       }
       writableDatabase.delete(
@@ -139,7 +133,7 @@ public final class VersionTable {
   public static int getVersion(SQLiteDatabase database, @Feature int feature, String instanceUid)
       throws DatabaseIOException {
     try {
-      if (!Util.tableExists(database, TABLE_NAME)) {
+      if (!tableExists(database, TABLE_NAME)) {
         return VERSION_UNSET;
       }
       try (Cursor cursor =
@@ -160,6 +154,14 @@ public final class VersionTable {
     } catch (SQLException e) {
       throw new DatabaseIOException(e);
     }
+  }
+
+  @VisibleForTesting
+  /* package */ static boolean tableExists(SQLiteDatabase readableDatabase, String tableName) {
+    long count =
+        DatabaseUtils.queryNumEntries(
+            readableDatabase, "sqlite_master", "tbl_name = ?", new String[] {tableName});
+    return count > 0;
   }
 
   private static String[] featureAndInstanceUidArguments(int feature, String instance) {

@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.text.webvtt;
 
-import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.text.SimpleSubtitleDecoder;
 import com.google.android.exoplayer2.text.Subtitle;
@@ -42,10 +41,12 @@ public final class Mp4WebvttDecoder extends SimpleSubtitleDecoder {
   private static final int TYPE_vttc = 0x76747463;
 
   private final ParsableByteArray sampleData;
+  private final WebvttCue.Builder builder;
 
   public Mp4WebvttDecoder() {
     super("Mp4WebvttDecoder");
     sampleData = new ParsableByteArray();
+    builder = new WebvttCue.Builder();
   }
 
   @Override
@@ -62,7 +63,7 @@ public final class Mp4WebvttDecoder extends SimpleSubtitleDecoder {
       int boxSize = sampleData.readInt();
       int boxType = sampleData.readInt();
       if (boxType == TYPE_vttc) {
-        resultingCueList.add(parseVttCueBox(sampleData, boxSize - BOX_HEADER_SIZE));
+        resultingCueList.add(parseVttCueBox(sampleData, builder, boxSize - BOX_HEADER_SIZE));
       } else {
         // Peers of the VTTCueBox are still not supported and are skipped.
         sampleData.skipBytes(boxSize - BOX_HEADER_SIZE);
@@ -71,10 +72,9 @@ public final class Mp4WebvttDecoder extends SimpleSubtitleDecoder {
     return new Mp4WebvttSubtitle(resultingCueList);
   }
 
-  private static Cue parseVttCueBox(ParsableByteArray sampleData, int remainingCueBoxBytes)
-      throws SubtitleDecoderException {
-    @Nullable Cue.Builder cueBuilder = null;
-    @Nullable CharSequence cueText = null;
+  private static Cue parseVttCueBox(ParsableByteArray sampleData, WebvttCue.Builder builder,
+        int remainingCueBoxBytes) throws SubtitleDecoderException {
+    builder.reset();
     while (remainingCueBoxBytes > 0) {
       if (remainingCueBoxBytes < BOX_HEADER_SIZE) {
         throw new SubtitleDecoderException("Incomplete vtt cue box header found.");
@@ -84,24 +84,18 @@ public final class Mp4WebvttDecoder extends SimpleSubtitleDecoder {
       remainingCueBoxBytes -= BOX_HEADER_SIZE;
       int payloadLength = boxSize - BOX_HEADER_SIZE;
       String boxPayload =
-          Util.fromUtf8Bytes(sampleData.getData(), sampleData.getPosition(), payloadLength);
+          Util.fromUtf8Bytes(sampleData.data, sampleData.getPosition(), payloadLength);
       sampleData.skipBytes(payloadLength);
       remainingCueBoxBytes -= payloadLength;
       if (boxType == TYPE_sttg) {
-        cueBuilder = WebvttCueParser.parseCueSettingsList(boxPayload);
+        WebvttCueParser.parseCueSettingsList(boxPayload, builder);
       } else if (boxType == TYPE_payl) {
-        cueText =
-            WebvttCueParser.parseCueText(
-                /* id= */ null, boxPayload.trim(), /* styles= */ Collections.emptyList());
+        WebvttCueParser.parseCueText(null, boxPayload.trim(), builder, Collections.emptyList());
       } else {
         // Other VTTCueBox children are still not supported and are ignored.
       }
     }
-    if (cueText == null) {
-      cueText = "";
-    }
-    return cueBuilder != null
-        ? cueBuilder.setText(cueText).build()
-        : WebvttCueParser.newCueForText(cueText);
+    return builder.build();
   }
+
 }

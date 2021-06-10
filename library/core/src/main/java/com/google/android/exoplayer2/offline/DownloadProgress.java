@@ -21,8 +21,8 @@ import com.google.android.exoplayer2.C;
 public class DownloadProgress {
 
   /** The number of bytes that have been downloaded. */
-  public volatile long bytesDownloaded;
+  public long bytesDownloaded;
 
   /** The percentage that has been downloaded, or {@link C#PERCENTAGE_UNSET} if unknown. */
-  public volatile float percentDownloaded;
+  public float percentDownloaded;
 }

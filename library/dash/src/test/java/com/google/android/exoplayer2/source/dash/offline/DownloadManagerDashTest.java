@@ -21,7 +21,6 @@ import static com.google.android.exoplayer2.source.dash.offline.DashDownloadTest
 import static com.google.android.exoplayer2.testutil.CacheAsserts.assertCacheEmpty;
 import static com.google.android.exoplayer2.testutil.CacheAsserts.assertCachedData;
 import static com.google.common.truth.Truth.assertThat;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
@@ -30,35 +29,37 @@ import com.google.android.exoplayer2.offline.DefaultDownloadIndex;
 import com.google.android.exoplayer2.offline.DefaultDownloaderFactory;
 import com.google.android.exoplayer2.offline.DownloadManager;
 import com.google.android.exoplayer2.offline.DownloadRequest;
+import com.google.android.exoplayer2.offline.DownloaderConstructorHelper;
 import com.google.android.exoplayer2.offline.StreamKey;
-import com.google.android.exoplayer2.robolectric.TestDownloadManagerListener;
 import com.google.android.exoplayer2.scheduler.Requirements;
 import com.google.android.exoplayer2.testutil.CacheAsserts.RequestSet;
 import com.google.android.exoplayer2.testutil.DummyMainThread;
 import com.google.android.exoplayer2.testutil.DummyMainThread.TestRunnable;
 import com.google.android.exoplayer2.testutil.FakeDataSet;
 import com.google.android.exoplayer2.testutil.FakeDataSource;
+import com.google.android.exoplayer2.testutil.TestDownloadManagerListener;
 import com.google.android.exoplayer2.testutil.TestUtil;
 import com.google.android.exoplayer2.upstream.DataSource.Factory;
-import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.NoOpCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
-import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowLog;
 
 /** Tests {@link DownloadManager}. */
 @RunWith(AndroidJUnit4.class)
+@LooperMode(LooperMode.Mode.PAUSED)
 public class DownloadManagerDashTest {
 
   private static final int ASSERT_TRUE_TIMEOUT_MS = 5000;
@@ -71,19 +72,17 @@ public class DownloadManagerDashTest {
   private StreamKey fakeStreamKey2;
   private TestDownloadManagerListener downloadManagerListener;
   private DefaultDownloadIndex downloadIndex;
-  private DummyMainThread testThread;
+  private DummyMainThread dummyMainThread;
 
   @Before
   public void setUp() throws Exception {
     ShadowLog.stream = System.out;
-    testThread = new DummyMainThread();
+    dummyMainThread = new DummyMainThread();
     Context context = ApplicationProvider.getApplicationContext();
     tempFolder = Util.createTempDirectory(context, "ExoPlayerTest");
     File cacheFolder = new File(tempFolder, "cache");
     cacheFolder.mkdir();
-    cache =
-        new SimpleCache(
-            cacheFolder, new NoOpCacheEvictor(), TestUtil.getInMemoryDatabaseProvider());
+    cache = new SimpleCache(cacheFolder, new NoOpCacheEvictor());
     MockitoAnnotations.initMocks(this);
     fakeDataSet =
         new FakeDataSet()
@@ -106,13 +105,13 @@ public class DownloadManagerDashTest {
   public void tearDown() {
     runOnMainThread(() -> downloadManager.release());
     Util.recursiveDelete(tempFolder);
-    testThread.release();
+    dummyMainThread.release();
   }
 
   // Disabled due to flakiness.
   @Ignore
   @Test
-  public void saveAndLoadActionFile() throws Throwable {
+  public void testSaveAndLoadActionFile() throws Throwable {
     // Configure fakeDataSet to block until interrupted when TEST_MPD is read.
     fakeDataSet
         .newData(TEST_MPD_URI)
@@ -145,71 +144,88 @@ public class DownloadManagerDashTest {
     // Revert fakeDataSet to normal.
     fakeDataSet.setData(TEST_MPD_URI, TEST_MPD);
 
-    testThread.runOnMainThread(this::createDownloadManager);
+    dummyMainThread.runOnMainThread(this::createDownloadManager);
 
     // Block on the test thread.
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
     assertCachedData(cache, fakeDataSet);
   }
 
   @Test
-  public void handleDownloadRequest_downloadSuccess() throws Throwable {
+  public void testHandleDownloadRequest() throws Throwable {
     handleDownloadRequest(fakeStreamKey1, fakeStreamKey2);
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
     assertCachedData(cache, new RequestSet(fakeDataSet).useBoundedDataSpecFor("audio_init_data"));
   }
 
   @Test
-  public void handleDownloadRequest_withRequest_downloadSuccess() throws Throwable {
+  public void testHandleMultipleDownloadRequest() throws Throwable {
     handleDownloadRequest(fakeStreamKey1);
     handleDownloadRequest(fakeStreamKey2);
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
     assertCachedData(cache, new RequestSet(fakeDataSet).useBoundedDataSpecFor("audio_init_data"));
   }
 
   @Test
-  public void handleDownloadRequest_withInferringRequest_success() throws Throwable {
+  public void testHandleInterferingDownloadRequest() throws Throwable {
     fakeDataSet
         .newData("audio_segment_2")
         .appendReadAction(() -> handleDownloadRequest(fakeStreamKey2))
         .appendReadData(TestUtil.buildTestData(5))
         .endData();
+
     handleDownloadRequest(fakeStreamKey1);
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
     assertCachedData(cache, new RequestSet(fakeDataSet).useBoundedDataSpecFor("audio_init_data"));
   }
 
   @Test
-  public void handleRemoveAction_blockUntilTaskCompleted_noDownloadedData() throws Throwable {
+  public void testHandleRemoveAction() throws Throwable {
     handleDownloadRequest(fakeStreamKey1);
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
+
     handleRemoveAction();
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
+
     assertCacheEmpty(cache);
   }
 
   @Test
-  public void handleRemoveAction_beforeDownloadFinish_noDownloadedData() throws Throwable {
+  public void testHandleRemoveActionBeforeDownloadFinish() throws Throwable {
     handleDownloadRequest(fakeStreamKey1);
     handleRemoveAction();
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
+
     assertCacheEmpty(cache);
   }
 
   @Test
-  public void handleRemoveAction_withInterfering_noDownloadedData() throws Throwable {
+  public void testHandleInterferingRemoveAction() throws Throwable {
     CountDownLatch downloadInProgressLatch = new CountDownLatch(1);
     fakeDataSet
         .newData("audio_segment_2")
         .appendReadAction(downloadInProgressLatch::countDown)
         .appendReadData(TestUtil.buildTestData(5))
         .endData();
+
     handleDownloadRequest(fakeStreamKey1);
-    assertThat(downloadInProgressLatch.await(ASSERT_TRUE_TIMEOUT_MS, MILLISECONDS)).isTrue();
+
+    assertThat(downloadInProgressLatch.await(ASSERT_TRUE_TIMEOUT_MS, TimeUnit.MILLISECONDS))
+        .isTrue();
 
     handleRemoveAction();
-    downloadManagerListener.blockUntilIdleAndThrowAnyFailure();
+
+    blockUntilTasksCompleteAndThrowAnyDownloadError();
+
     assertCacheEmpty(cache);
+  }
+
+  private void blockUntilTasksCompleteAndThrowAnyDownloadError() throws Throwable {
+    downloadManagerListener.blockUntilTasksCompleteAndThrowAnyDownloadError();
   }
 
   private void handleDownloadRequest(StreamKey... keys) {
@@ -220,10 +236,13 @@ public class DownloadManagerDashTest {
   private DownloadRequest getDownloadRequest(StreamKey... keys) {
     ArrayList<StreamKey> keysList = new ArrayList<>();
     Collections.addAll(keysList, keys);
-    return new DownloadRequest.Builder(TEST_ID, TEST_MPD_URI)
-        .setMimeType(MimeTypes.APPLICATION_MPD)
-        .setStreamKeys(keysList)
-        .build();
+    return new DownloadRequest(
+        TEST_ID,
+        DownloadRequest.TYPE_DASH,
+        TEST_MPD_URI,
+        keysList,
+        /* customCacheKey= */ null,
+        null);
   }
 
   private void handleRemoveAction() {
@@ -234,22 +253,22 @@ public class DownloadManagerDashTest {
     runOnMainThread(
         () -> {
           Factory fakeDataSourceFactory = new FakeDataSource.Factory().setFakeDataSet(fakeDataSet);
-          DefaultDownloaderFactory downloaderFactory =
-              new DefaultDownloaderFactory(
-                  new CacheDataSource.Factory()
-                      .setCache(cache)
-                      .setUpstreamDataSourceFactory(fakeDataSourceFactory),
-                  /* executor= */ Runnable::run);
           downloadManager =
               new DownloadManager(
-                  ApplicationProvider.getApplicationContext(), downloadIndex, downloaderFactory);
+                  ApplicationProvider.getApplicationContext(),
+                  downloadIndex,
+                  new DefaultDownloaderFactory(
+                      new DownloaderConstructorHelper(cache, fakeDataSourceFactory)));
           downloadManager.setRequirements(new Requirements(0));
-          downloadManagerListener = new TestDownloadManagerListener(downloadManager);
+
+          downloadManagerListener =
+              new TestDownloadManagerListener(
+                  downloadManager, dummyMainThread, /* timeoutMs= */ 3000);
           downloadManager.resumeDownloads();
         });
   }
 
   private void runOnMainThread(TestRunnable r) {
-    testThread.runTestOnMainThread(r);
+    dummyMainThread.runTestOnMainThread(r);
   }
 }

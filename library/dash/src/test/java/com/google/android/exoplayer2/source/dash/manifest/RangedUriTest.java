@@ -31,7 +31,7 @@ public class RangedUriTest {
   private static final String FULL_URI = BASE_URI + PARTIAL_URI;
 
   @Test
-  public void merge() {
+  public void testMerge() {
     RangedUri rangeA = new RangedUri(FULL_URI, 0, 10);
     RangedUri rangeB = new RangedUri(FULL_URI, 10, 10);
     RangedUri expected = new RangedUri(FULL_URI, 0, 20);
@@ -39,7 +39,7 @@ public class RangedUriTest {
   }
 
   @Test
-  public void mergeUnbounded() {
+  public void testMergeUnbounded() {
     RangedUri rangeA = new RangedUri(FULL_URI, 0, 10);
     RangedUri rangeB = new RangedUri(FULL_URI, 10, C.LENGTH_UNSET);
     RangedUri expected = new RangedUri(FULL_URI, 0, C.LENGTH_UNSET);
@@ -47,7 +47,7 @@ public class RangedUriTest {
   }
 
   @Test
-  public void nonMerge() {
+  public void testNonMerge() {
     // A and B do not overlap, so should not merge
     RangedUri rangeA = new RangedUri(FULL_URI, 0, 10);
     RangedUri rangeB = new RangedUri(FULL_URI, 11, 10);
@@ -70,7 +70,7 @@ public class RangedUriTest {
   }
 
   @Test
-  public void mergeWithBaseUri() {
+  public void testMergeWithBaseUri() {
     RangedUri rangeA = new RangedUri(PARTIAL_URI, 0, 10);
     RangedUri rangeB = new RangedUri(FULL_URI, 10, 10);
     RangedUri expected = new RangedUri(FULL_URI, 0, 20);

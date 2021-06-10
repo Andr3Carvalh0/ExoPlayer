@@ -15,25 +15,23 @@
  */
 package com.google.android.exoplayer2.ext.flac;
 
-import static androidx.annotation.VisibleForTesting.PACKAGE_PRIVATE;
-
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.ParserException;
 import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.decoder.SimpleDecoder;
 import com.google.android.exoplayer2.decoder.SimpleOutputBuffer;
-import com.google.android.exoplayer2.extractor.FlacStreamMetadata;
+import com.google.android.exoplayer2.util.FlacStreamMetadata;
 import com.google.android.exoplayer2.util.Util;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-/** Flac decoder. */
-@VisibleForTesting(otherwise = PACKAGE_PRIVATE)
-public final class FlacDecoder
-    extends SimpleDecoder<DecoderInputBuffer, SimpleOutputBuffer, FlacDecoderException> {
+/**
+ * Flac decoder.
+ */
+/* package */ final class FlacDecoder extends
+    SimpleDecoder<DecoderInputBuffer, SimpleOutputBuffer, FlacDecoderException> {
 
   private final FlacStreamMetadata streamMetadata;
   private final FlacDecoderJni decoderJni;
@@ -65,7 +63,7 @@ public final class FlacDecoder
       streamMetadata = decoderJni.decodeStreamMetadata();
     } catch (ParserException e) {
       throw new FlacDecoderException("Failed to decode StreamInfo", e);
-    } catch (IOException e) {
+    } catch (IOException | InterruptedException e) {
       // Never happens.
       throw new IllegalStateException(e);
     }
@@ -87,7 +85,7 @@ public final class FlacDecoder
 
   @Override
   protected SimpleOutputBuffer createOutputBuffer() {
-    return new SimpleOutputBuffer(this::releaseOutputBuffer);
+    return new SimpleOutputBuffer(this);
   }
 
   @Override
@@ -109,7 +107,7 @@ public final class FlacDecoder
       decoderJni.decodeSample(outputData);
     } catch (FlacDecoderJni.FlacFrameDecodeException e) {
       return new FlacDecoderException("Frame decoding failed", e);
-    } catch (IOException e) {
+    } catch (IOException | InterruptedException e) {
       // Never happens.
       throw new IllegalStateException(e);
     }

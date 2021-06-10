@@ -17,21 +17,19 @@ package com.google.android.exoplayer2.playbacktests.gts;
 
 import static com.google.android.exoplayer2.C.WIDEVINE_UUID;
 
+import android.annotation.TargetApi;
 import android.media.MediaDrm;
 import android.media.UnsupportedSchemeException;
+import android.net.Uri;
 import android.view.Surface;
-import android.widget.FrameLayout;
-import androidx.annotation.RequiresApi;
-import androidx.test.core.app.ApplicationProvider;
-import androidx.test.platform.app.InstrumentationRegistry;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
-import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.RendererCapabilities;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.decoder.DecoderCounters;
 import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
 import com.google.android.exoplayer2.drm.FrameworkMediaDrm;
 import com.google.android.exoplayer2.drm.HttpMediaDrmCallback;
 import com.google.android.exoplayer2.drm.MediaDrmCallback;
@@ -47,9 +45,9 @@ import com.google.android.exoplayer2.testutil.ExoHostedTest;
 import com.google.android.exoplayer2.testutil.HostActivity;
 import com.google.android.exoplayer2.testutil.HostActivity.HostedTest;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
 import com.google.android.exoplayer2.trackselection.RandomTrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
@@ -57,7 +55,6 @@ import com.google.android.exoplayer2.upstream.DefaultLoadErrorHandlingPolicy;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
-import com.google.common.primitives.Ints;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -187,9 +184,7 @@ import java.util.List;
 
   private DashHostedTest createDashHostedTest(
       boolean canIncludeAdditionalVideoFormats, boolean isCddLimitedRetry) {
-    MetricsLogger metricsLogger =
-        MetricsLogger.DEFAULT_FACTORY.create(
-            InstrumentationRegistry.getInstrumentation(), tag, streamName);
+    MetricsLogger metricsLogger = MetricsLogger.Factory.createDefault(tag);
     return new DashHostedTest(tag, streamName, manifestUrl, metricsLogger, fullPlaybackNoSeeking,
         audioFormat, canIncludeAdditionalVideoFormats, isCddLimitedRetry, actionSchedule,
         offlineLicenseKeySetId, widevineLicenseUrl, useL1Widevine, dataSourceFactory,
@@ -261,33 +256,34 @@ import java.util.List;
     }
 
     @Override
-    protected DrmSessionManager buildDrmSessionManager() {
+    protected DrmSessionManager<FrameworkMediaCrypto> buildDrmSessionManager(
+        final String userAgent) {
       if (widevineLicenseUrl == null) {
-        return DrmSessionManager.DRM_UNSUPPORTED;
+        return DrmSessionManager.getDummyDrmSessionManager();
       }
-      MediaDrmCallback drmCallback =
-          new HttpMediaDrmCallback(widevineLicenseUrl, new DefaultHttpDataSourceFactory());
-      DefaultDrmSessionManager drmSessionManager =
-          new DefaultDrmSessionManager.Builder()
-              .setUuidAndExoMediaDrmProvider(
-                  C.WIDEVINE_UUID,
-                  uuid -> {
-                    try {
-                      FrameworkMediaDrm drm = FrameworkMediaDrm.newInstance(WIDEVINE_UUID);
-                      if (!useL1Widevine) {
-                        drm.setPropertyString(SECURITY_LEVEL_PROPERTY, WIDEVINE_SECURITY_LEVEL_3);
-                      }
-                      return drm;
-                    } catch (UnsupportedDrmException e) {
-                      throw new IllegalStateException(e);
-                    }
-                  })
-              .build(drmCallback);
-
-      if (offlineLicenseKeySetId != null) {
-        drmSessionManager.setMode(DefaultDrmSessionManager.MODE_PLAYBACK, offlineLicenseKeySetId);
+      try {
+        MediaDrmCallback drmCallback = new HttpMediaDrmCallback(widevineLicenseUrl,
+            new DefaultHttpDataSourceFactory(userAgent));
+        FrameworkMediaDrm frameworkMediaDrm = FrameworkMediaDrm.newInstance(WIDEVINE_UUID);
+        DefaultDrmSessionManager<FrameworkMediaCrypto> drmSessionManager =
+            new DefaultDrmSessionManager<>(
+                C.WIDEVINE_UUID,
+                frameworkMediaDrm,
+                drmCallback,
+                /* optionalKeyRequestParameters= */ null,
+                /* multiSession= */ false,
+                DefaultDrmSessionManager.INITIAL_DRM_REQUEST_RETRY_COUNT);
+        if (!useL1Widevine) {
+          frameworkMediaDrm.setPropertyString(SECURITY_LEVEL_PROPERTY, WIDEVINE_SECURITY_LEVEL_3);
+        }
+        if (offlineLicenseKeySetId != null) {
+          drmSessionManager.setMode(DefaultDrmSessionManager.MODE_PLAYBACK,
+              offlineLicenseKeySetId);
+        }
+        return drmSessionManager;
+      } catch (UnsupportedDrmException e) {
+        throw new IllegalStateException(e);
       }
-      return drmSessionManager;
     }
 
     @Override
@@ -303,21 +299,20 @@ import java.util.List;
 
     @Override
     protected MediaSource buildSource(
-        HostActivity host,
-        DrmSessionManager drmSessionManager,
-        FrameLayout overlayFrameLayout) {
+        HostActivity host, String userAgent, DrmSessionManager<?> drmSessionManager) {
       DataSource.Factory dataSourceFactory =
           this.dataSourceFactory != null
               ? this.dataSourceFactory
-              : new DefaultDataSourceFactory(host);
+              : new DefaultDataSourceFactory(host, userAgent);
+      Uri manifestUri = Uri.parse(manifestUrl);
       return new DashMediaSource.Factory(dataSourceFactory)
           .setDrmSessionManager(drmSessionManager)
           .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(MIN_LOADABLE_RETRY_COUNT))
-          .createMediaSource(MediaItem.fromUri(manifestUrl));
+          .createMediaSource(manifestUri);
     }
 
     @Override
-    protected void logMetrics(DecoderCounters audioCounters, DecoderCounters videoCounters) {
+    protected void onTestFinished(DecoderCounters audioCounters, DecoderCounters videoCounters) {
       metricsLogger.logMetric(MetricsLogger.KEY_TEST_NAME, streamName);
       metricsLogger.logMetric(MetricsLogger.KEY_IS_CDD_LIMITED_RETRY, isCddLimitedRetry);
       metricsLogger.logMetric(MetricsLogger.KEY_FRAMES_DROPPED_COUNT,
@@ -329,10 +324,7 @@ import java.util.List;
       metricsLogger.logMetric(MetricsLogger.KEY_FRAMES_RENDERED_COUNT,
           videoCounters.renderedOutputBufferCount);
       metricsLogger.close();
-    }
 
-    @Override
-    protected void assertPassed(DecoderCounters audioCounters, DecoderCounters videoCounters) {
       if (fullPlaybackNoSeeking) {
         // We shouldn't have skipped any output buffers.
         DecoderCountersUtil
@@ -347,20 +339,15 @@ import java.util.List;
             videoCounters.inputBufferCount - 1, videoCounters.inputBufferCount);
       }
       try {
-        if (!shouldSkipDroppedOutputBufferPerformanceAssertions()) {
-          int droppedFrameLimit =
-              (int)
-                  Math.ceil(
-                      MAX_DROPPED_VIDEO_FRAME_FRACTION
-                          * DecoderCountersUtil.getTotalBufferCount(videoCounters));
-          // Assert that performance is acceptable.
-          // Assert that total dropped frames were within limit.
-          DecoderCountersUtil.assertDroppedBufferLimit(
-              tag + VIDEO_TAG_SUFFIX, videoCounters, droppedFrameLimit);
-          // Assert that consecutive dropped frames were within limit.
-          DecoderCountersUtil.assertConsecutiveDroppedBufferLimit(
-              tag + VIDEO_TAG_SUFFIX, videoCounters, MAX_CONSECUTIVE_DROPPED_VIDEO_FRAMES);
-        }
+        int droppedFrameLimit = (int) Math.ceil(MAX_DROPPED_VIDEO_FRAME_FRACTION
+            * DecoderCountersUtil.getTotalBufferCount(videoCounters));
+        // Assert that performance is acceptable.
+        // Assert that total dropped frames were within limit.
+        DecoderCountersUtil.assertDroppedBufferLimit(tag + VIDEO_TAG_SUFFIX, videoCounters,
+            droppedFrameLimit);
+        // Assert that consecutive dropped frames were within limit.
+        DecoderCountersUtil.assertConsecutiveDroppedBufferLimit(tag + VIDEO_TAG_SUFFIX,
+            videoCounters, MAX_CONSECUTIVE_DROPPED_VIDEO_FRAMES);
       } catch (AssertionError e) {
         if (trackSelector.includedAdditionalVideoFormats) {
           // Retry limiting to CDD mandated formats (b/28220076).
@@ -371,11 +358,6 @@ import java.util.List;
         }
       }
     }
-  }
-
-  /** Provides a hook to skip dropped output buffer assertions in specific circumstances. */
-  private static boolean shouldSkipDroppedOutputBufferPerformanceAssertions() {
-    return false;
   }
 
   private static final class DashTestTrackSelector extends DefaultTrackSelector {
@@ -389,9 +371,7 @@ import java.util.List;
 
     private DashTestTrackSelector(String tag, String audioFormatId, String[] videoFormatIds,
         boolean canIncludeAdditionalVideoFormats) {
-      super(
-          ApplicationProvider.getApplicationContext(),
-          new RandomTrackSelection.Factory(/* seed= */ 0));
+      super(new RandomTrackSelection.Factory(/* seed= */ 0));
       this.tag = tag;
       this.audioFormatId = audioFormatId;
       this.videoFormatIds = videoFormatIds;
@@ -399,7 +379,7 @@ import java.util.List;
     }
 
     @Override
-    protected ExoTrackSelection.Definition[] selectAllTracks(
+    protected TrackSelection.Definition[] selectAllTracks(
         MappedTrackInfo mappedTrackInfo,
         int[][][] rendererFormatSupports,
         int[] rendererMixedMimeTypeAdaptationSupports,
@@ -412,10 +392,10 @@ import java.util.List;
       TrackGroupArray audioTrackGroups = mappedTrackInfo.getTrackGroups(AUDIO_RENDERER_INDEX);
       Assertions.checkState(videoTrackGroups.length == 1);
       Assertions.checkState(audioTrackGroups.length == 1);
-      ExoTrackSelection.Definition[] definitions =
-          new ExoTrackSelection.Definition[mappedTrackInfo.getRendererCount()];
+      TrackSelection.Definition[] definitions =
+          new TrackSelection.Definition[mappedTrackInfo.getRendererCount()];
       definitions[VIDEO_RENDERER_INDEX] =
-          new ExoTrackSelection.Definition(
+          new TrackSelection.Definition(
               videoTrackGroups.get(0),
               getVideoTrackIndices(
                   videoTrackGroups.get(0),
@@ -423,7 +403,7 @@ import java.util.List;
                   videoFormatIds,
                   canIncludeAdditionalVideoFormats));
       definitions[AUDIO_RENDERER_INDEX] =
-          new ExoTrackSelection.Definition(
+          new TrackSelection.Definition(
               audioTrackGroups.get(0), getTrackIndex(audioTrackGroups.get(0), audioFormatId));
       includedAdditionalVideoFormats =
           definitions[VIDEO_RENDERER_INDEX].tracks.length > videoFormatIds.length;
@@ -456,7 +436,7 @@ import java.util.List;
         }
       }
 
-      int[] trackIndicesArray = Ints.toArray(trackIndices);
+      int[] trackIndicesArray = Util.toArray(trackIndices);
       Arrays.sort(trackIndicesArray);
       return trackIndicesArray;
     }
@@ -471,16 +451,17 @@ import java.util.List;
     }
 
     private static boolean isFormatHandled(int formatSupport) {
-      return RendererCapabilities.getFormatSupport(formatSupport) == C.FORMAT_HANDLED;
+      return RendererCapabilities.getFormatSupport(formatSupport)
+          == RendererCapabilities.FORMAT_HANDLED;
     }
 
   }
 
   /**
-   * Creates a new {@code MediaDrm} object. The encapsulation ensures that the tests can be executed
-   * for API level < 18.
+   * Creates a new {@code MediaDrm} object. The encapsulation ensures that the tests can be
+   * executed for API level < 18.
    */
-  @RequiresApi(18)
+  @TargetApi(18)
   private static final class MediaDrmBuilder {
 
     public static MediaDrm build () {

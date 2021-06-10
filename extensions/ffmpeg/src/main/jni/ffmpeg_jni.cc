@@ -26,35 +26,35 @@ extern "C" {
 #include <stdint.h>
 #endif
 #include <libavcodec/avcodec.h>
+#include <libavresample/avresample.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/opt.h>
-#include <libswresample/swresample.h>
 }
 
 #define LOG_TAG "ffmpeg_jni"
 #define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, \
                    __VA_ARGS__))
 
-#define LIBRARY_FUNC(RETURN_TYPE, NAME, ...)                              \
-  extern "C" {                                                            \
-  JNIEXPORT RETURN_TYPE                                                   \
-      Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegLibrary_##NAME( \
-          JNIEnv *env, jobject thiz, ##__VA_ARGS__);                      \
-  }                                                                       \
-  JNIEXPORT RETURN_TYPE                                                   \
-      Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegLibrary_##NAME( \
-          JNIEnv *env, jobject thiz, ##__VA_ARGS__)
+#define DECODER_FUNC(RETURN_TYPE, NAME, ...) \
+  extern "C" { \
+  JNIEXPORT RETURN_TYPE \
+    Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegDecoder_ ## NAME \
+      (JNIEnv* env, jobject thiz, ##__VA_ARGS__);\
+  } \
+  JNIEXPORT RETURN_TYPE \
+    Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegDecoder_ ## NAME \
+      (JNIEnv* env, jobject thiz, ##__VA_ARGS__)\
 
-#define AUDIO_DECODER_FUNC(RETURN_TYPE, NAME, ...)                             \
-  extern "C" {                                                                 \
-  JNIEXPORT RETURN_TYPE                                                        \
-      Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegAudioDecoder_##NAME( \
-          JNIEnv *env, jobject thiz, ##__VA_ARGS__);                           \
-  }                                                                            \
-  JNIEXPORT RETURN_TYPE                                                        \
-      Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegAudioDecoder_##NAME( \
-          JNIEnv *env, jobject thiz, ##__VA_ARGS__)
+#define LIBRARY_FUNC(RETURN_TYPE, NAME, ...) \
+  extern "C" { \
+  JNIEXPORT RETURN_TYPE \
+    Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegLibrary_ ## NAME \
+      (JNIEnv* env, jobject thiz, ##__VA_ARGS__);\
+  } \
+  JNIEXPORT RETURN_TYPE \
+    Java_com_google_android_exoplayer2_ext_ffmpeg_FfmpegLibrary_ ## NAME \
+      (JNIEnv* env, jobject thiz, ##__VA_ARGS__)\
 
 #define ERROR_STRING_BUFFER_LENGTH 256
 
@@ -63,10 +63,9 @@ static const AVSampleFormat OUTPUT_FORMAT_PCM_16BIT = AV_SAMPLE_FMT_S16;
 // Output format corresponding to AudioFormat.ENCODING_PCM_FLOAT.
 static const AVSampleFormat OUTPUT_FORMAT_PCM_FLOAT = AV_SAMPLE_FMT_FLT;
 
-// LINT.IfChange
-static const int AUDIO_DECODER_ERROR_INVALID_DATA = -1;
-static const int AUDIO_DECODER_ERROR_OTHER = -2;
-// LINT.ThenChange(../java/com/google/android/exoplayer2/ext/ffmpeg/FfmpegAudioDecoder.java)
+// Error codes matching FfmpegDecoder.java.
+static const int DECODER_ERROR_INVALID_DATA = -1;
+static const int DECODER_ERROR_OTHER = -2;
 
 /**
  * Returns the AVCodec with the specified name, or NULL if it is not available.
@@ -84,8 +83,7 @@ AVCodecContext *createContext(JNIEnv *env, AVCodec *codec, jbyteArray extraData,
 
 /**
  * Decodes the packet into the output buffer, returning the number of bytes
- * written, or a negative AUDIO_DECODER_ERROR constant value in the case of an
- * error.
+ * written, or a negative DECODER_ERROR constant value in the case of an error.
  */
 int decodePacket(AVCodecContext *context, AVPacket *packet,
                  uint8_t *outputBuffer, int outputSize);
@@ -113,17 +111,12 @@ LIBRARY_FUNC(jstring, ffmpegGetVersion) {
   return env->NewStringUTF(LIBAVCODEC_IDENT);
 }
 
-LIBRARY_FUNC(jint, ffmpegGetInputBufferPaddingSize) {
-  return (jint)AV_INPUT_BUFFER_PADDING_SIZE;
-}
-
 LIBRARY_FUNC(jboolean, ffmpegHasDecoder, jstring codecName) {
   return getCodecByName(env, codecName) != NULL;
 }
 
-AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
-                   jbyteArray extraData, jboolean outputFloat,
-                   jint rawSampleRate, jint rawChannelCount) {
+DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName, jbyteArray extraData,
+             jboolean outputFloat, jint rawSampleRate, jint rawChannelCount) {
   AVCodec *codec = getCodecByName(env, codecName);
   if (!codec) {
     LOGE("Codec not found.");
@@ -133,8 +126,8 @@ AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
                               rawChannelCount);
 }
 
-AUDIO_DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
-                   jint inputSize, jobject outputData, jint outputSize) {
+DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
+    jint inputSize, jobject outputData, jint outputSize) {
   if (!context) {
     LOGE("Context must be non-NULL.");
     return -1;
@@ -161,7 +154,7 @@ AUDIO_DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
                       outputSize);
 }
 
-AUDIO_DECODER_FUNC(jint, ffmpegGetChannelCount, jlong context) {
+DECODER_FUNC(jint, ffmpegGetChannelCount, jlong context) {
   if (!context) {
     LOGE("Context must be non-NULL.");
     return -1;
@@ -169,7 +162,7 @@ AUDIO_DECODER_FUNC(jint, ffmpegGetChannelCount, jlong context) {
   return ((AVCodecContext *) context)->channels;
 }
 
-AUDIO_DECODER_FUNC(jint, ffmpegGetSampleRate, jlong context) {
+DECODER_FUNC(jint, ffmpegGetSampleRate, jlong context) {
   if (!context) {
     LOGE("Context must be non-NULL.");
     return -1;
@@ -177,7 +170,7 @@ AUDIO_DECODER_FUNC(jint, ffmpegGetSampleRate, jlong context) {
   return ((AVCodecContext *) context)->sample_rate;
 }
 
-AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
+DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
   AVCodecContext *context = (AVCodecContext *) jContext;
   if (!context) {
     LOGE("Tried to reset without a context.");
@@ -205,7 +198,7 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
   return (jlong) context;
 }
 
-AUDIO_DECODER_FUNC(void, ffmpegRelease, jlong context) {
+DECODER_FUNC(void, ffmpegRelease, jlong context) {
   if (context) {
     releaseContext((AVCodecContext *) context);
   }
@@ -266,8 +259,8 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
   result = avcodec_send_packet(context, packet);
   if (result) {
     logError("avcodec_send_packet", result);
-    return result == AVERROR_INVALIDDATA ? AUDIO_DECODER_ERROR_INVALID_DATA
-                                         : AUDIO_DECODER_ERROR_OTHER;
+    return result == AVERROR_INVALIDDATA ? DECODER_ERROR_INVALID_DATA
+                                         : DECODER_ERROR_OTHER;
   }
 
   // Dequeue output data until it runs out.
@@ -296,11 +289,11 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
     int sampleCount = frame->nb_samples;
     int dataSize = av_samples_get_buffer_size(NULL, channelCount, sampleCount,
                                               sampleFormat, 1);
-    SwrContext *resampleContext;
+    AVAudioResampleContext *resampleContext;
     if (context->opaque) {
-      resampleContext = (SwrContext *)context->opaque;
+      resampleContext = (AVAudioResampleContext *) context->opaque;
     } else {
-      resampleContext = swr_alloc();
+      resampleContext = avresample_alloc_context();
       av_opt_set_int(resampleContext, "in_channel_layout",  channelLayout, 0);
       av_opt_set_int(resampleContext, "out_channel_layout", channelLayout, 0);
       av_opt_set_int(resampleContext, "in_sample_rate", sampleRate, 0);
@@ -309,9 +302,9 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
       // The output format is always the requested format.
       av_opt_set_int(resampleContext, "out_sample_fmt",
           context->request_sample_fmt, 0);
-      result = swr_init(resampleContext);
+      result = avresample_open(resampleContext);
       if (result < 0) {
-        logError("swr_init", result);
+        logError("avresample_open", result);
         av_frame_free(&frame);
         return -1;
       }
@@ -319,7 +312,7 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
     }
     int inSampleSize = av_get_bytes_per_sample(sampleFormat);
     int outSampleSize = av_get_bytes_per_sample(context->request_sample_fmt);
-    int outSamples = swr_get_out_samples(resampleContext, sampleCount);
+    int outSamples = avresample_get_out_samples(resampleContext, sampleCount);
     int bufferOutSize = outSampleSize * channelCount * outSamples;
     if (outSize + bufferOutSize > outputSize) {
       LOGE("Output buffer size (%d) too small for output data (%d).",
@@ -327,14 +320,15 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
       av_frame_free(&frame);
       return -1;
     }
-    result = swr_convert(resampleContext, &outputBuffer, bufferOutSize,
-                         (const uint8_t **)frame->data, frame->nb_samples);
+    result = avresample_convert(resampleContext, &outputBuffer, bufferOutSize,
+                                outSamples, frame->data, frame->linesize[0],
+                                sampleCount);
     av_frame_free(&frame);
     if (result < 0) {
-      logError("swr_convert", result);
+      logError("avresample_convert", result);
       return result;
     }
-    int available = swr_get_out_samples(resampleContext, 0);
+    int available = avresample_available(resampleContext);
     if (available != 0) {
       LOGE("Expected no samples remaining after resampling, but found %d.",
            available);
@@ -357,9 +351,9 @@ void releaseContext(AVCodecContext *context) {
   if (!context) {
     return;
   }
-  SwrContext *swrContext;
-  if ((swrContext = (SwrContext *)context->opaque)) {
-    swr_free(&swrContext);
+  AVAudioResampleContext *resampleContext;
+  if ((resampleContext = (AVAudioResampleContext *) context->opaque)) {
+    avresample_free(&resampleContext);
     context->opaque = NULL;
   }
   avcodec_free_context(&context);

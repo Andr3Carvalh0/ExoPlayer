@@ -19,14 +19,16 @@ import androidx.annotation.Nullable;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** Buffer for {@link SimpleDecoder} output. */
+/**
+ * Buffer for {@link SimpleDecoder} output.
+ */
 public class SimpleOutputBuffer extends OutputBuffer {
 
-  private final Owner<SimpleOutputBuffer> owner;
+  private final SimpleDecoder<?, SimpleOutputBuffer, ?> owner;
 
   @Nullable public ByteBuffer data;
 
-  public SimpleOutputBuffer(Owner<SimpleOutputBuffer> owner) {
+  public SimpleOutputBuffer(SimpleDecoder<?, SimpleOutputBuffer, ?> owner) {
     this.owner = owner;
   }
 

@@ -28,10 +28,11 @@ import java.io.IOException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.LooperMode;
 
 /** Unit tests for {@link LoopingMediaSource}. */
-@SuppressWarnings("deprecation") // Testing deprecated class.
 @RunWith(AndroidJUnit4.class)
+@LooperMode(LooperMode.Mode.PAUSED)
 public class LoopingMediaSourceTest {
 
   private FakeTimeline multiWindowTimeline;
@@ -46,96 +47,65 @@ public class LoopingMediaSourceTest {
   }
 
   @Test
-  public void singleLoopTimeline() throws IOException {
+  public void testSingleLoopTimeline() throws IOException {
     Timeline timeline = getLoopingTimeline(multiWindowTimeline, 1);
     TimelineAsserts.assertWindowTags(timeline, 111, 222, 333);
     TimelineAsserts.assertPeriodCounts(timeline, 1, 1, 1);
-    boolean shuffled = false;
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, C.INDEX_UNSET, 0, 1);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, C.INDEX_UNSET);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
-    shuffled = true; // FakeTimeline has FakeShuffleOrder which returns a reverse order.
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, C.INDEX_UNSET);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, C.INDEX_UNSET, 0, 1);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
+    for (boolean shuffled : new boolean[] {false, true}) {
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_OFF, shuffled, C.INDEX_UNSET, 0, 1);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
+      TimelineAsserts.assertNextWindowIndices(
+          timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, C.INDEX_UNSET);
+      TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
+      TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
+    }
   }
 
   @Test
-  public void multiLoopTimeline() throws IOException {
+  public void testMultiLoopTimeline() throws IOException {
     Timeline timeline = getLoopingTimeline(multiWindowTimeline, 3);
     TimelineAsserts.assertWindowTags(timeline, 111, 222, 333, 111, 222, 333, 111, 222, 333);
     TimelineAsserts.assertPeriodCounts(timeline, 1, 1, 1, 1, 1, 1, 1, 1, 1);
-    boolean shuffled = false;
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, C.INDEX_UNSET, 0, 1, 2, 3, 4, 5, 6, 7);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 8, 0, 1, 2, 3, 4, 5, 6, 7);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, 3, 4, 5, 6, 7, 8, C.INDEX_UNSET);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 3, 4, 5, 6, 7, 8, 0);
-    shuffled = true; // FakeTimeline has FakeShuffleOrder which returns a reverse order.
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, C.INDEX_UNSET, 4, 5, 0, 7, 8, 3);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 6, 4, 5, 0, 7, 8, 3);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 5, 0, 1, 8, 3, 4, C.INDEX_UNSET, 6, 7);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
-    TimelineAsserts.assertNextWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 5, 0, 1, 8, 3, 4, 2, 6, 7);
+    for (boolean shuffled : new boolean[] {false, true}) {
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_OFF, shuffled, C.INDEX_UNSET, 0, 1, 2, 3, 4, 5, 6, 7, 8);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ALL, shuffled, 8, 0, 1, 2, 3, 4, 5, 6, 7);
+      TimelineAsserts.assertNextWindowIndices(
+          timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, 3, 4, 5, 6, 7, 8, C.INDEX_UNSET);
+      TimelineAsserts.assertNextWindowIndices(
+          timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2, 3, 4, 5, 6, 7, 8);
+      TimelineAsserts.assertNextWindowIndices(
+          timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 3, 4, 5, 6, 7, 8, 0);
+    }
   }
 
   @Test
-  public void infiniteLoopTimeline() throws IOException {
+  public void testInfiniteLoopTimeline() throws IOException {
     Timeline timeline = getLoopingTimeline(multiWindowTimeline, Integer.MAX_VALUE);
     TimelineAsserts.assertWindowTags(timeline, 111, 222, 333);
     TimelineAsserts.assertPeriodCounts(timeline, 1, 1, 1);
-    boolean shuffled = false;
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 2, 0, 1);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, 0);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
-    shuffled = true; // FakeTimeline has FakeShuffleOrder which returns a reverse order.
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, 0);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertPreviousWindowIndices(
-        timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_OFF, shuffled, 2, 0, 1);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
-    TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
+    for (boolean shuffled : new boolean[] {false, true}) {
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_OFF, shuffled, 2, 0, 1);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
+      TimelineAsserts.assertPreviousWindowIndices(
+          timeline, Player.REPEAT_MODE_ALL, shuffled, 2, 0, 1);
+      TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_OFF, shuffled, 1, 2, 0);
+      TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ONE, shuffled, 0, 1, 2);
+      TimelineAsserts.assertNextWindowIndices(timeline, Player.REPEAT_MODE_ALL, shuffled, 1, 2, 0);
+    }
   }
 
   @Test
-  public void emptyTimelineLoop() throws IOException {
+  public void testEmptyTimelineLoop() throws IOException {
     Timeline timeline = getLoopingTimeline(Timeline.EMPTY, 1);
     TimelineAsserts.assertEmpty(timeline);
 
@@ -147,17 +117,17 @@ public class LoopingMediaSourceTest {
   }
 
   @Test
-  public void singleLoopPeriodCreation() throws Exception {
+  public void testSingleLoopPeriodCreation() throws Exception {
     testMediaPeriodCreation(multiWindowTimeline, /* loopCount= */ 1);
   }
 
   @Test
-  public void multiLoopPeriodCreation() throws Exception {
+  public void testMultiLoopPeriodCreation() throws Exception {
     testMediaPeriodCreation(multiWindowTimeline, /* loopCount= */ 3);
   }
 
   @Test
-  public void infiniteLoopPeriodCreation() throws Exception {
+  public void testInfiniteLoopPeriodCreation() throws Exception {
     testMediaPeriodCreation(multiWindowTimeline, /* loopCount= */ Integer.MAX_VALUE);
   }
 

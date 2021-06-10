@@ -19,7 +19,6 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
 import androidx.annotation.Nullable;
-import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.metadata.Metadata;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,14 +30,8 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
   /** Holds attributes defined in an EXT-X-STREAM-INF tag. */
   public static final class VariantInfo implements Parcelable {
 
-    /**
-     * The average bitrate as declared by the AVERAGE-BANDWIDTH attribute of the EXT-X-STREAM-INF
-     * tag, or {@link Format#NO_VALUE} if the attribute is not declared.
-     */
-    public final int averageBitrate;
-
-    /** The peak bitrate as declared by the BANDWIDTH attribute of the EXT-X-STREAM-INF tag. */
-    public final int peakBitrate;
+    /** The bitrate as declared by the EXT-X-STREAM-INF tag. */
+    public final long bitrate;
 
     /**
      * The VIDEO value as defined in the EXT-X-STREAM-INF tag, or null if the VIDEO attribute is not
@@ -67,22 +60,19 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
     /**
      * Creates an instance.
      *
-     * @param averageBitrate See {@link #averageBitrate}.
-     * @param peakBitrate See {@link #peakBitrate}.
+     * @param bitrate See {@link #bitrate}.
      * @param videoGroupId See {@link #videoGroupId}.
      * @param audioGroupId See {@link #audioGroupId}.
      * @param subtitleGroupId See {@link #subtitleGroupId}.
      * @param captionGroupId See {@link #captionGroupId}.
      */
     public VariantInfo(
-        int averageBitrate,
-        int peakBitrate,
+        long bitrate,
         @Nullable String videoGroupId,
         @Nullable String audioGroupId,
         @Nullable String subtitleGroupId,
         @Nullable String captionGroupId) {
-      this.averageBitrate = averageBitrate;
-      this.peakBitrate = peakBitrate;
+      this.bitrate = bitrate;
       this.videoGroupId = videoGroupId;
       this.audioGroupId = audioGroupId;
       this.subtitleGroupId = subtitleGroupId;
@@ -90,8 +80,7 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
     }
 
     /* package */ VariantInfo(Parcel in) {
-      averageBitrate = in.readInt();
-      peakBitrate = in.readInt();
+      bitrate = in.readLong();
       videoGroupId = in.readString();
       audioGroupId = in.readString();
       subtitleGroupId = in.readString();
@@ -107,8 +96,7 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
         return false;
       }
       VariantInfo that = (VariantInfo) other;
-      return averageBitrate == that.averageBitrate
-          && peakBitrate == that.peakBitrate
+      return bitrate == that.bitrate
           && TextUtils.equals(videoGroupId, that.videoGroupId)
           && TextUtils.equals(audioGroupId, that.audioGroupId)
           && TextUtils.equals(subtitleGroupId, that.subtitleGroupId)
@@ -117,8 +105,7 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
 
     @Override
     public int hashCode() {
-      int result = averageBitrate;
-      result = 31 * result + peakBitrate;
+      int result = (int) (bitrate ^ (bitrate >>> 32));
       result = 31 * result + (videoGroupId != null ? videoGroupId.hashCode() : 0);
       result = 31 * result + (audioGroupId != null ? audioGroupId.hashCode() : 0);
       result = 31 * result + (subtitleGroupId != null ? subtitleGroupId.hashCode() : 0);
@@ -135,8 +122,7 @@ public final class HlsTrackMetadataEntry implements Metadata.Entry {
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
-      dest.writeInt(averageBitrate);
-      dest.writeInt(peakBitrate);
+      dest.writeLong(bitrate);
       dest.writeString(videoGroupId);
       dest.writeString(audioGroupId);
       dest.writeString(subtitleGroupId);

@@ -18,7 +18,9 @@ package com.google.android.exoplayer2.source;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.Timeline;
 
-/** An overridable {@link Timeline} implementation forwarding all methods to another timeline. */
+/**
+ * An overridable {@link Timeline} implementation forwarding all methods to another timeline.
+ */
 public abstract class ForwardingTimeline extends Timeline {
 
   protected final Timeline timeline;

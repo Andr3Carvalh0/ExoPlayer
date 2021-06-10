@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.ext.cast;
 
-import com.google.android.exoplayer2.MediaItem;
 import com.google.android.gms.cast.MediaQueueItem;
 
 /** Converts between {@link MediaItem} and the Cast SDK's {@link MediaQueueItem}. */

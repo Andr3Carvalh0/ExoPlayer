@@ -19,7 +19,7 @@ import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.util.Util;
 
 /** A parsed program information element. */
-public final class ProgramInformation {
+public class ProgramInformation {
   /** The title for the media presentation. */
   @Nullable public final String title;
 
@@ -53,7 +53,7 @@ public final class ProgramInformation {
     if (this == obj) {
       return true;
     }
-    if (!(obj instanceof ProgramInformation)) {
+    if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
     ProgramInformation other = (ProgramInformation) obj;

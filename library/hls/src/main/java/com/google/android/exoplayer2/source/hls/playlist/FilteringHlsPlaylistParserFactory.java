@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.source.hls.playlist;
 
-import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.offline.FilteringManifestParser;
 import com.google.android.exoplayer2.offline.StreamKey;
 import com.google.android.exoplayer2.upstream.ParsingLoadable;
@@ -49,9 +48,8 @@ public final class FilteringHlsPlaylistParserFactory implements HlsPlaylistParse
 
   @Override
   public ParsingLoadable.Parser<HlsPlaylist> createPlaylistParser(
-      HlsMasterPlaylist masterPlaylist, @Nullable HlsMediaPlaylist previousMediaPlaylist) {
+      HlsMasterPlaylist masterPlaylist) {
     return new FilteringManifestParser<>(
-        hlsPlaylistParserFactory.createPlaylistParser(masterPlaylist, previousMediaPlaylist),
-        streamKeys);
+        hlsPlaylistParserFactory.createPlaylistParser(masterPlaylist), streamKeys);
   }
 }

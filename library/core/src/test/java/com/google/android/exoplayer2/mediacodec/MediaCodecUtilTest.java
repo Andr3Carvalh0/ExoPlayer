@@ -96,11 +96,22 @@ public final class MediaCodecUtilTest {
             /* colorTransfer= */ C.COLOR_TRANSFER_SDR,
             /* hdrStaticInfo= */ new byte[] {1, 2, 3, 4, 5, 6, 7});
     Format format =
-        new Format.Builder()
-            .setSampleMimeType(MimeTypes.VIDEO_AV1)
-            .setCodecs("av01.0.21M.10")
-            .setColorInfo(colorInfo)
-            .build();
+        Format.createVideoSampleFormat(
+            /* id= */ null,
+            MimeTypes.VIDEO_AV1,
+            /* codecs= */ "av01.0.21M.10",
+            /* bitrate= */ Format.NO_VALUE,
+            /* maxInputSize= */ Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            /* frameRate= */ Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* rotationDegrees= */ Format.NO_VALUE,
+            /* pixelWidthHeightRatio= */ 0,
+            /* projectionData= */ null,
+            /* stereoMode= */ Format.NO_VALUE,
+            /* colorInfo= */ colorInfo,
+            /* drmInitData */ null);
     assertCodecProfileAndLevelForFormat(
         format,
         MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10,
@@ -116,11 +127,22 @@ public final class MediaCodecUtilTest {
             /* colorTransfer= */ C.COLOR_TRANSFER_HLG,
             /* hdrStaticInfo= */ null);
     Format format =
-        new Format.Builder()
-            .setSampleMimeType(MimeTypes.VIDEO_AV1)
-            .setCodecs("av01.0.21M.10")
-            .setColorInfo(colorInfo)
-            .build();
+        Format.createVideoSampleFormat(
+            /* id= */ null,
+            MimeTypes.VIDEO_AV1,
+            /* codecs= */ "av01.0.21M.10",
+            /* bitrate= */ Format.NO_VALUE,
+            /* maxInputSize= */ Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            /* frameRate= */ Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* rotationDegrees= */ Format.NO_VALUE,
+            /* pixelWidthHeightRatio= */ 0,
+            /* projectionData= */ null,
+            /* stereoMode= */ Format.NO_VALUE,
+            /* colorInfo= */ colorInfo,
+            /* drmInitData */ null);
     assertCodecProfileAndLevelForFormat(
         format,
         MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10,
@@ -139,20 +161,52 @@ public final class MediaCodecUtilTest {
 
   @Test
   public void getCodecProfileAndLevel_rejectsNullCodecString() {
-    Format format = new Format.Builder().setCodecs(null).build();
+    Format format =
+        Format.createVideoSampleFormat(
+            /* id= */ null,
+            /* sampleMimeType= */ MimeTypes.VIDEO_UNKNOWN,
+            /* codecs= */ null,
+            /* bitrate= */ Format.NO_VALUE,
+            /* maxInputSize= */ Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            /* frameRate= */ Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* drmInitData= */ null);
     assertThat(MediaCodecUtil.getCodecProfileAndLevel(format)).isNull();
   }
 
   @Test
   public void getCodecProfileAndLevel_rejectsEmptyCodecString() {
-    Format format = new Format.Builder().setCodecs("").build();
+    Format format =
+        Format.createVideoSampleFormat(
+            /* id= */ null,
+            /* sampleMimeType= */ MimeTypes.VIDEO_UNKNOWN,
+            /* codecs= */ "",
+            /* bitrate= */ Format.NO_VALUE,
+            /* maxInputSize= */ Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            /* frameRate= */ Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* drmInitData= */ null);
     assertThat(MediaCodecUtil.getCodecProfileAndLevel(format)).isNull();
   }
 
   private static void assertCodecProfileAndLevelForCodecsString(
-      String sampleMimeType, String codecs, int profile, int level) {
+      String mimeType, String codecs, int profile, int level) {
     Format format =
-        new Format.Builder().setSampleMimeType(sampleMimeType).setCodecs(codecs).build();
+        Format.createVideoSampleFormat(
+            /* id= */ null,
+            mimeType,
+            /* codecs= */ codecs,
+            /* bitrate= */ Format.NO_VALUE,
+            /* maxInputSize= */ Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            /* frameRate= */ Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* drmInitData= */ null);
     assertCodecProfileAndLevelForFormat(format, profile, level);
   }
 

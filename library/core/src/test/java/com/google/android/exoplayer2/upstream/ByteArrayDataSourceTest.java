@@ -16,10 +16,8 @@
 package com.google.android.exoplayer2.upstream;
 
 import static com.google.common.truth.Truth.assertThat;
-import static java.lang.Math.min;
 import static org.junit.Assert.fail;
 
-import android.net.Uri;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.android.exoplayer2.C;
 import java.io.IOException;
@@ -34,17 +32,17 @@ public final class ByteArrayDataSourceTest {
   private static final byte[] TEST_DATA_ODD = new byte[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
   @Test
-  public void fullReadSingleBytes() {
+  public void testFullReadSingleBytes() {
     readTestData(TEST_DATA, 0, C.LENGTH_UNSET, 1, 0, 1, false);
   }
 
   @Test
-  public void fullReadAllBytes() {
+  public void testFullReadAllBytes() {
     readTestData(TEST_DATA, 0, C.LENGTH_UNSET, 100, 0, 100, false);
   }
 
   @Test
-  public void limitReadSingleBytes() {
+  public void testLimitReadSingleBytes() {
     // Limit set to the length of the data.
     readTestData(TEST_DATA, 0, TEST_DATA.length, 1, 0, 1, false);
     // And less.
@@ -52,7 +50,7 @@ public final class ByteArrayDataSourceTest {
   }
 
   @Test
-  public void fullReadTwoBytes() {
+  public void testFullReadTwoBytes() {
     // Try with the total data length an exact multiple of the size of each individual read.
     readTestData(TEST_DATA, 0, C.LENGTH_UNSET, 2, 0, 2, false);
     // And not.
@@ -60,7 +58,7 @@ public final class ByteArrayDataSourceTest {
   }
 
   @Test
-  public void limitReadTwoBytes() {
+  public void testLimitReadTwoBytes() {
     // Try with the limit an exact multiple of the size of each individual read.
     readTestData(TEST_DATA, 0, 6, 2, 0, 2, false);
     // And not.
@@ -68,23 +66,31 @@ public final class ByteArrayDataSourceTest {
   }
 
   @Test
-  public void readFromValidOffsets() {
+  public void testReadFromValidOffsets() {
     // Read from an offset without bound.
     readTestData(TEST_DATA, 1, C.LENGTH_UNSET, 1, 0, 1, false);
     // And with bound.
     readTestData(TEST_DATA, 1, 6, 1, 0, 1, false);
     // Read from the last possible offset without bound.
-    readTestData(TEST_DATA, TEST_DATA.length, C.LENGTH_UNSET, 1, 0, 1, false);
+    readTestData(TEST_DATA, TEST_DATA.length - 1, C.LENGTH_UNSET, 1, 0, 1, false);
     // And with bound.
-    readTestData(TEST_DATA, TEST_DATA.length, 1, 1, 0, 1, false);
+    readTestData(TEST_DATA, TEST_DATA.length - 1, 1, 1, 0, 1, false);
   }
 
   @Test
-  public void readFromInvalidOffsets() {
+  public void testReadFromInvalidOffsets() {
     // Read from first invalid offset and check failure without bound.
-    readTestData(TEST_DATA, TEST_DATA.length + 1, C.LENGTH_UNSET, 1, 0, 1, true);
+    readTestData(TEST_DATA, TEST_DATA.length, C.LENGTH_UNSET, 1, 0, 1, true);
     // And with bound.
-    readTestData(TEST_DATA, TEST_DATA.length + 1, 1, 1, 0, 1, true);
+    readTestData(TEST_DATA, TEST_DATA.length, 1, 1, 0, 1, true);
+  }
+
+  @Test
+  public void testReadWithInvalidLength() {
+    // Read more data than is available.
+    readTestData(TEST_DATA, 0, TEST_DATA.length + 1, 1, 0, 1, true);
+    // And with bound.
+    readTestData(TEST_DATA, 1, TEST_DATA.length, 1, 0, 1, true);
   }
 
   /**
@@ -100,28 +106,25 @@ public final class ByteArrayDataSourceTest {
    */
   private void readTestData(byte[] testData, int dataOffset, int dataLength, int outputBufferLength,
       int writeOffset, int maxReadLength, boolean expectFailOnOpen) {
-    int expectedFinalBytesRead = testData.length - dataOffset;
-    if (dataLength != C.LENGTH_UNSET) {
-      expectedFinalBytesRead = min(expectedFinalBytesRead, dataLength);
-    }
+    int expectedFinalBytesRead =
+        dataLength == C.LENGTH_UNSET ? (testData.length - dataOffset) : dataLength;
     ByteArrayDataSource dataSource = new ByteArrayDataSource(testData);
     boolean opened = false;
     try {
       // Open the source.
-      long length = dataSource.open(new DataSpec(Uri.EMPTY, dataOffset, dataLength));
+      long length = dataSource.open(new DataSpec(null, dataOffset, dataLength, null));
       opened = true;
       assertThat(expectFailOnOpen).isFalse();
 
       // Verify the resolved length is as we expect.
-      assertThat(length)
-          .isEqualTo(dataLength != C.LENGTH_UNSET ? dataLength : expectedFinalBytesRead);
+      assertThat(length).isEqualTo(expectedFinalBytesRead);
 
       byte[] outputBuffer = new byte[outputBufferLength];
       int accumulatedBytesRead = 0;
       while (true) {
         // Calculate a valid length for the next read, constraining by the specified output buffer
         // length, write offset and maximum write length input parameters.
-        int requestedReadLength = min(maxReadLength, outputBufferLength - writeOffset);
+        int requestedReadLength = Math.min(maxReadLength, outputBufferLength - writeOffset);
         assertThat(requestedReadLength).isGreaterThan(0);
 
         int bytesRead = dataSource.read(outputBuffer, writeOffset, requestedReadLength);

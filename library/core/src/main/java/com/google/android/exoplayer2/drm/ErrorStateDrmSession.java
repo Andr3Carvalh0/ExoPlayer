@@ -16,13 +16,11 @@
 package com.google.android.exoplayer2.drm;
 
 import androidx.annotation.Nullable;
-import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Assertions;
 import java.util.Map;
-import java.util.UUID;
 
 /** A {@link DrmSession} that's in a terminal error state. */
-public final class ErrorStateDrmSession implements DrmSession {
+public final class ErrorStateDrmSession<T extends ExoMediaCrypto> implements DrmSession<T> {
 
   private final DrmSessionException error;
 
@@ -47,13 +45,8 @@ public final class ErrorStateDrmSession implements DrmSession {
   }
 
   @Override
-  public final UUID getSchemeUuid() {
-    return C.UUID_NIL;
-  }
-
-  @Override
   @Nullable
-  public ExoMediaCrypto getMediaCrypto() {
+  public T getMediaCrypto() {
     return null;
   }
 
@@ -70,12 +63,12 @@ public final class ErrorStateDrmSession implements DrmSession {
   }
 
   @Override
-  public void acquire(@Nullable DrmSessionEventListener.EventDispatcher eventDispatcher) {
+  public void acquire() {
     // Do nothing.
   }
 
   @Override
-  public void release(@Nullable DrmSessionEventListener.EventDispatcher eventDispatcher) {
+  public void release() {
     // Do nothing.
   }
 }

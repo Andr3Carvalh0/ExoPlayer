@@ -33,7 +33,7 @@ public final class DataSourceInputStreamTest {
   private static final byte[] TEST_DATA = TestUtil.buildTestData(16);
 
   @Test
-  public void readSingleBytes() throws IOException {
+  public void testReadSingleBytes() throws IOException {
     DataSourceInputStream inputStream = buildTestInputStream();
     // No bytes read yet.
     assertThat(inputStream.bytesRead()).isEqualTo(0);
@@ -53,7 +53,7 @@ public final class DataSourceInputStreamTest {
   }
 
   @Test
-  public void read() throws IOException {
+  public void testRead() throws IOException {
     DataSourceInputStream inputStream = buildTestInputStream();
     // Read bytes.
     byte[] readBytes = new byte[TEST_DATA.length];
@@ -76,7 +76,7 @@ public final class DataSourceInputStreamTest {
   }
 
   @Test
-  public void skip() throws IOException {
+  public void testSkip() throws IOException {
     DataSourceInputStream inputStream = buildTestInputStream();
     // Skip bytes.
     long totalBytesSkipped = 0;

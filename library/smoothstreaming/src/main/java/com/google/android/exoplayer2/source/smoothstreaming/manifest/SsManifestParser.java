@@ -23,7 +23,6 @@ import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.ParserException;
-import com.google.android.exoplayer2.audio.AacUtil;
 import com.google.android.exoplayer2.drm.DrmInitData;
 import com.google.android.exoplayer2.drm.DrmInitData.SchemeData;
 import com.google.android.exoplayer2.extractor.mp4.PsshAtomUtil;
@@ -50,8 +49,8 @@ import org.xmlpull.v1.XmlPullParserFactory;
 /**
  * Parses SmoothStreaming client manifests.
  *
- * @see <a href="http://msdn.microsoft.com/en-us/library/ee673436(v=vs.90).aspx">IIS Smooth
- *     Streaming Client Manifest Format</a>
+ * @see <a href="http://msdn.microsoft.com/en-us/library/ee673436(v=vs.90).aspx">
+ * IIS Smooth Streaming Client Manifest Format</a>
  */
 public class SsManifestParser implements ParsingLoadable.Parser<SsManifest> {
 
@@ -387,7 +386,7 @@ public class SsManifestParser implements ParsingLoadable.Parser<SsManifest> {
           if (type == C.TRACK_TYPE_VIDEO || type == C.TRACK_TYPE_AUDIO) {
             Format[] formats = streamElement.formats;
             for (int i = 0; i < formats.length; i++) {
-              formats[i] = formats[i].buildUpon().setDrmInitData(drmInitData).build();
+              formats[i] = formats[i].copyWithDrmInitData(drmInitData);
             }
           }
         }
@@ -664,65 +663,96 @@ public class SsManifestParser implements ParsingLoadable.Parser<SsManifest> {
 
     @Override
     public void parseStartTag(XmlPullParser parser) throws ParserException {
-      Format.Builder formatBuilder = new Format.Builder();
-
-      @Nullable String sampleMimeType = fourCCToMimeType(parseRequiredString(parser, KEY_FOUR_CC));
       int type = (Integer) getNormalizedAttribute(KEY_TYPE);
+      String id = parser.getAttributeValue(null, KEY_INDEX);
+      String name = (String) getNormalizedAttribute(KEY_NAME);
+      int bitrate = parseRequiredInt(parser, KEY_BITRATE);
+      String sampleMimeType = fourCCToMimeType(parseRequiredString(parser, KEY_FOUR_CC));
+
       if (type == C.TRACK_TYPE_VIDEO) {
+        int width = parseRequiredInt(parser, KEY_MAX_WIDTH);
+        int height = parseRequiredInt(parser, KEY_MAX_HEIGHT);
         List<byte[]> codecSpecificData = buildCodecSpecificData(
             parser.getAttributeValue(null, KEY_CODEC_PRIVATE_DATA));
-        formatBuilder
-            .setContainerMimeType(MimeTypes.VIDEO_MP4)
-            .setWidth(parseRequiredInt(parser, KEY_MAX_WIDTH))
-            .setHeight(parseRequiredInt(parser, KEY_MAX_HEIGHT))
-            .setInitializationData(codecSpecificData);
+        format =
+            Format.createVideoContainerFormat(
+                id,
+                name,
+                MimeTypes.VIDEO_MP4,
+                sampleMimeType,
+                /* codecs= */ null,
+                /* metadata= */ null,
+                bitrate,
+                width,
+                height,
+                /* frameRate= */ Format.NO_VALUE,
+                codecSpecificData,
+                /* selectionFlags= */ 0,
+                /* roleFlags= */ 0);
       } else if (type == C.TRACK_TYPE_AUDIO) {
-        if (sampleMimeType == null) {
-          // If we don't know the MIME type, assume AAC.
-          sampleMimeType = MimeTypes.AUDIO_AAC;
-        }
-        int channelCount = parseRequiredInt(parser, KEY_CHANNELS);
-        int sampleRate = parseRequiredInt(parser, KEY_SAMPLING_RATE);
+        sampleMimeType = sampleMimeType == null ? MimeTypes.AUDIO_AAC : sampleMimeType;
+        int channels = parseRequiredInt(parser, KEY_CHANNELS);
+        int samplingRate = parseRequiredInt(parser, KEY_SAMPLING_RATE);
         List<byte[]> codecSpecificData = buildCodecSpecificData(
             parser.getAttributeValue(null, KEY_CODEC_PRIVATE_DATA));
         if (codecSpecificData.isEmpty() && MimeTypes.AUDIO_AAC.equals(sampleMimeType)) {
-          codecSpecificData =
-              Collections.singletonList(
-                  AacUtil.buildAacLcAudioSpecificConfig(sampleRate, channelCount));
+          codecSpecificData = Collections.singletonList(
+              CodecSpecificDataUtil.buildAacLcAudioSpecificConfig(samplingRate, channels));
         }
-        formatBuilder
-            .setContainerMimeType(MimeTypes.AUDIO_MP4)
-            .setChannelCount(channelCount)
-            .setSampleRate(sampleRate)
-            .setInitializationData(codecSpecificData);
+        String language = (String) getNormalizedAttribute(KEY_LANGUAGE);
+        format =
+            Format.createAudioContainerFormat(
+                id,
+                name,
+                MimeTypes.AUDIO_MP4,
+                sampleMimeType,
+                /* codecs= */ null,
+                /* metadata= */ null,
+                bitrate,
+                channels,
+                samplingRate,
+                codecSpecificData,
+                /* selectionFlags= */ 0,
+                /* roleFlags= */ 0,
+                language);
       } else if (type == C.TRACK_TYPE_TEXT) {
+        String subType = (String) getNormalizedAttribute(KEY_SUB_TYPE);
         @C.RoleFlags int roleFlags = 0;
-        @Nullable String subType = (String) getNormalizedAttribute(KEY_SUB_TYPE);
-        if (subType != null) {
-          switch (subType) {
-            case "CAPT":
-              roleFlags = C.ROLE_FLAG_CAPTION;
-              break;
-            case "DESC":
-              roleFlags = C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND;
-              break;
-            default:
-              break;
-          }
+        switch (subType) {
+          case "CAPT":
+            roleFlags = C.ROLE_FLAG_CAPTION;
+            break;
+          case "DESC":
+            roleFlags = C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND;
+            break;
+          default:
+            break;
         }
-        formatBuilder.setContainerMimeType(MimeTypes.APPLICATION_MP4).setRoleFlags(roleFlags);
+        String language = (String) getNormalizedAttribute(KEY_LANGUAGE);
+        format =
+            Format.createTextContainerFormat(
+                id,
+                name,
+                MimeTypes.APPLICATION_MP4,
+                sampleMimeType,
+                /* codecs= */ null,
+                bitrate,
+                /* selectionFlags= */ 0,
+                roleFlags,
+                language);
       } else {
-        formatBuilder.setContainerMimeType(MimeTypes.APPLICATION_MP4);
+        format =
+            Format.createContainerFormat(
+                id,
+                name,
+                MimeTypes.APPLICATION_MP4,
+                sampleMimeType,
+                /* codecs= */ null,
+                bitrate,
+                /* selectionFlags= */ 0,
+                /* roleFlags= */ 0,
+                /* language= */ null);
       }
-
-      format =
-          formatBuilder
-              .setId(parser.getAttributeValue(null, KEY_INDEX))
-              .setLabel((String) getNormalizedAttribute(KEY_NAME))
-              .setSampleMimeType(sampleMimeType)
-              .setAverageBitrate(parseRequiredInt(parser, KEY_BITRATE))
-              .setLanguage((String) getNormalizedAttribute(KEY_LANGUAGE))
-              .build();
     }
 
     @Override
@@ -734,7 +764,7 @@ public class SsManifestParser implements ParsingLoadable.Parser<SsManifest> {
       ArrayList<byte[]> csd = new ArrayList<>();
       if (!TextUtils.isEmpty(codecSpecificDataString)) {
         byte[] codecPrivateData = Util.getBytesFromHexString(codecSpecificDataString);
-        @Nullable byte[][] split = CodecSpecificDataUtil.splitNalUnits(codecPrivateData);
+        byte[][] split = CodecSpecificDataUtil.splitNalUnits(codecPrivateData);
         if (split == null) {
           csd.add(codecPrivateData);
         } else {
@@ -744,7 +774,6 @@ public class SsManifestParser implements ParsingLoadable.Parser<SsManifest> {
       return csd;
     }
 
-    @Nullable
     private static String fourCCToMimeType(String fourCC) {
       if (fourCC.equalsIgnoreCase("H264") || fourCC.equalsIgnoreCase("X264")
           || fourCC.equalsIgnoreCase("AVC1") || fourCC.equalsIgnoreCase("DAVC")) {

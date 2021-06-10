@@ -15,9 +15,6 @@
  */
 package com.google.android.exoplayer2.text.tx3g;
 
-import static com.google.android.exoplayer2.text.Cue.ANCHOR_TYPE_START;
-import static com.google.android.exoplayer2.text.Cue.LINE_TYPE_FRACTION;
-
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
@@ -31,20 +28,17 @@ import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.text.SimpleSubtitleDecoder;
 import com.google.android.exoplayer2.text.Subtitle;
 import com.google.android.exoplayer2.text.SubtitleDecoderException;
-import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.ParsableByteArray;
 import com.google.android.exoplayer2.util.Util;
-import com.google.common.base.Charsets;
+import java.nio.charset.Charset;
 import java.util.List;
 
 /**
  * A {@link SimpleSubtitleDecoder} for tx3g.
- *
- * <p>Currently supports parsing of a single text track with embedded styles.
+ * <p>
+ * Currently supports parsing of a single text track with embedded styles.
  */
 public final class Tx3gDecoder extends SimpleSubtitleDecoder {
-
-  private static final String TAG = "Tx3gDecoder";
 
   private static final char BOM_UTF16_BE = '\uFEFF';
   private static final char BOM_UTF16_LE = '\uFFFE';
@@ -72,12 +66,12 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
 
   private final ParsableByteArray parsableByteArray;
 
-  private final boolean customVerticalPlacement;
-  private final int defaultFontFace;
-  private final int defaultColorRgba;
-  private final String defaultFontFamily;
-  private final float defaultVerticalPlacement;
-  private final int calculatedVideoTrackHeight;
+  private boolean customVerticalPlacement;
+  private int defaultFontFace;
+  private int defaultColorRgba;
+  private String defaultFontFamily;
+  private float defaultVerticalPlacement;
+  private int calculatedVideoTrackHeight;
 
   /**
    * Sets up a new {@link Tx3gDecoder} with default values.
@@ -88,7 +82,7 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
     super("Tx3gDecoder");
     parsableByteArray = new ParsableByteArray();
 
-    if (initializationData.size() == 1
+    if (initializationData != null && initializationData.size() == 1
         && (initializationData.get(0).length == 48 || initializationData.get(0).length == 53)) {
       byte[] initializationBytes = initializationData.get(0);
       defaultFontFace = initializationBytes[24];
@@ -105,9 +99,8 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
       if (customVerticalPlacement) {
         int requestedVerticalPlacement = ((initializationBytes[10] & 0xFF) << 8)
             | (initializationBytes[11] & 0xFF);
-        defaultVerticalPlacement =
-            Util.constrainValue(
-                (float) requestedVerticalPlacement / calculatedVideoTrackHeight, 0.0f, 0.95f);
+        defaultVerticalPlacement = (float) requestedVerticalPlacement / calculatedVideoTrackHeight;
+        defaultVerticalPlacement = Util.constrainValue(defaultVerticalPlacement, 0.0f, 0.95f);
       } else {
         defaultVerticalPlacement = DEFAULT_VERTICAL_PLACEMENT;
       }
@@ -117,7 +110,6 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
       defaultFontFamily = DEFAULT_FONT_FAMILY;
       customVerticalPlacement = false;
       defaultVerticalPlacement = DEFAULT_VERTICAL_PLACEMENT;
-      calculatedVideoTrackHeight = C.LENGTH_UNSET;
     }
   }
 
@@ -135,7 +127,8 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
         SPAN_PRIORITY_LOW);
     attachColor(cueText, defaultColorRgba, DEFAULT_COLOR, 0, cueText.length(),
         SPAN_PRIORITY_LOW);
-    attachFontFamily(cueText, defaultFontFamily, 0, cueText.length());
+    attachFontFamily(cueText, defaultFontFamily, DEFAULT_FONT_FAMILY, 0, cueText.length(),
+        SPAN_PRIORITY_LOW);
     float verticalPlacement = defaultVerticalPlacement;
     // Find and attach additional styles.
     while (parsableByteArray.bytesLeft() >= SIZE_ATOM_HEADER) {
@@ -157,11 +150,15 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
       parsableByteArray.setPosition(position + atomSize);
     }
     return new Tx3gSubtitle(
-        new Cue.Builder()
-            .setText(cueText)
-            .setLine(verticalPlacement, LINE_TYPE_FRACTION)
-            .setLineAnchor(ANCHOR_TYPE_START)
-            .build());
+        new Cue(
+            cueText,
+            /* textAlignment= */ null,
+            verticalPlacement,
+            Cue.LINE_TYPE_FRACTION,
+            Cue.ANCHOR_TYPE_START,
+            Cue.DIMEN_UNSET,
+            Cue.TYPE_UNSET,
+            Cue.DIMEN_UNSET));
   }
 
   private static String readSubtitleText(ParsableByteArray parsableByteArray)
@@ -174,10 +171,10 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
     if (parsableByteArray.bytesLeft() >= SIZE_BOM_UTF16) {
       char firstChar = parsableByteArray.peekChar();
       if (firstChar == BOM_UTF16_BE || firstChar == BOM_UTF16_LE) {
-        return parsableByteArray.readString(textLength, Charsets.UTF_16);
+        return parsableByteArray.readString(textLength, Charset.forName(C.UTF16_NAME));
       }
     }
-    return parsableByteArray.readString(textLength, Charsets.UTF_8);
+    return parsableByteArray.readString(textLength, Charset.forName(C.UTF8_NAME));
   }
 
   private void applyStyleRecord(ParsableByteArray parsableByteArray,
@@ -189,16 +186,6 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
     int fontFace = parsableByteArray.readUnsignedByte();
     parsableByteArray.skipBytes(1); // font size
     int colorRgba = parsableByteArray.readInt();
-
-    if (end > cueText.length()) {
-      Log.w(
-          TAG, "Truncating styl end (" + end + ") to cueText.length() (" + cueText.length() + ").");
-      end = cueText.length();
-    }
-    if (start >= end) {
-      Log.w(TAG, "Ignoring styl with start (" + start + ") >= end (" + end + ").");
-      return;
-    }
     attachFontFace(cueText, fontFace, defaultFontFace, start, end, SPAN_PRIORITY_HIGH);
     attachColor(cueText, colorRgba, defaultColorRgba, start, end, SPAN_PRIORITY_HIGH);
   }
@@ -238,14 +225,11 @@ public final class Tx3gDecoder extends SimpleSubtitleDecoder {
   }
 
   @SuppressWarnings("ReferenceEquality")
-  private static void attachFontFamily(
-      SpannableStringBuilder cueText, String fontFamily, int start, int end) {
-    if (fontFamily != Tx3gDecoder.DEFAULT_FONT_FAMILY) {
-      cueText.setSpan(
-          new TypefaceSpan(fontFamily),
-          start,
-          end,
-          Spanned.SPAN_EXCLUSIVE_EXCLUSIVE | Tx3gDecoder.SPAN_PRIORITY_LOW);
+  private static void attachFontFamily(SpannableStringBuilder cueText, String fontFamily,
+      String defaultFontFamily, int start, int end, int spanPriority) {
+    if (fontFamily != defaultFontFamily) {
+      cueText.setSpan(new TypefaceSpan(fontFamily), start, end,
+          Spanned.SPAN_EXCLUSIVE_EXCLUSIVE | spanPriority);
     }
   }
 

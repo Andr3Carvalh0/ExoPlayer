@@ -23,10 +23,9 @@ import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Handler;
 import android.view.Surface;
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.Format;
+import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.GlUtil;
 import com.google.android.exoplayer2.util.TimedValueQueue;
@@ -72,7 +71,7 @@ public final class VideoProcessingGLSurfaceView extends GLSurfaceView {
 
   @Nullable private SurfaceTexture surfaceTexture;
   @Nullable private Surface surface;
-  @Nullable private ExoPlayer.VideoComponent videoComponent;
+  @Nullable private Player.VideoComponent videoComponent;
 
   /**
    * Creates a new instance. Pass {@code true} for {@code requireSecureContext} if the {@link
@@ -84,7 +83,6 @@ public final class VideoProcessingGLSurfaceView extends GLSurfaceView {
    *     created, if supported by the device.
    * @param videoProcessor Processor that draws to the view.
    */
-  @SuppressWarnings("InlinedApi")
   public VideoProcessingGLSurfaceView(
       Context context, boolean requireSecureContext, VideoProcessor videoProcessor) {
     super(context);
@@ -151,7 +149,7 @@ public final class VideoProcessingGLSurfaceView extends GLSurfaceView {
    *
    * @param newVideoComponent The new video component, or {@code null} to detach this view.
    */
-  public void setVideoComponent(@Nullable ExoPlayer.VideoComponent newVideoComponent) {
+  public void setVideoComponent(@Nullable Player.VideoComponent newVideoComponent) {
     if (newVideoComponent == videoComponent) {
       return;
     }
@@ -284,7 +282,7 @@ public final class VideoProcessingGLSurfaceView extends GLSurfaceView {
     public void onVideoFrameAboutToBeRendered(
         long presentationTimeUs,
         long releaseTimeNs,
-        @NonNull Format format,
+        Format format,
         @Nullable MediaFormat mediaFormat) {
       sampleTimestampQueue.add(releaseTimeNs, presentationTimeUs);
     }

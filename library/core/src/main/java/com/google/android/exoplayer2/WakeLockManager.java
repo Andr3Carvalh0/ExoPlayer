@@ -39,8 +39,7 @@ import com.google.android.exoplayer2.util.Log;
   private boolean stayAwake;
 
   public WakeLockManager(Context context) {
-    powerManager =
-        (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+    powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
   }
 
   /**
@@ -49,19 +48,18 @@ import com.google.android.exoplayer2.util.Log;
    * <p>By default, wake lock handling is not enabled. Enabling this will acquire the wake lock if
    * necessary. Disabling this will release the wake lock if it is held.
    *
-   * <p>Enabling {@link WakeLock} requires the {@link android.Manifest.permission#WAKE_LOCK}.
-   *
-   * @param enabled True if the player should handle a {@link WakeLock}, false otherwise.
+   * @param enabled True if the player should handle a {@link WakeLock}, false otherwise. Please
+   *     note that enabling this requires the {@link android.Manifest.permission#WAKE_LOCK}
+   *     permission.
    */
   public void setEnabled(boolean enabled) {
     if (enabled) {
       if (wakeLock == null) {
         if (powerManager == null) {
-          Log.w(TAG, "PowerManager is null, therefore not creating the WakeLock.");
+          Log.w(TAG, "PowerManager was null, therefore the WakeLock was not created.");
           return;
         }
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG);
-        wakeLock.setReferenceCounted(false);
       }
     }
 
@@ -88,14 +86,17 @@ import com.google.android.exoplayer2.util.Log;
   // reasonable timeout that would not affect the user.
   @SuppressLint("WakelockTimeout")
   private void updateWakeLock() {
-    if (wakeLock == null) {
-      return;
-    }
-
-    if (enabled && stayAwake) {
-      wakeLock.acquire();
-    } else {
-      wakeLock.release();
+    // Needed for the library nullness check. If enabled is true, the wakelock will not be null.
+    if (wakeLock != null) {
+      if (enabled) {
+        if (stayAwake && !wakeLock.isHeld()) {
+          wakeLock.acquire();
+        } else if (!stayAwake && wakeLock.isHeld()) {
+          wakeLock.release();
+        }
+      } else if (wakeLock.isHeld()) {
+        wakeLock.release();
+      }
     }
   }
 }

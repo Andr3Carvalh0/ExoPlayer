@@ -17,12 +17,22 @@ package com.google.android.exoplayer2.video;
 
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.decoder.OutputBuffer;
 import java.nio.ByteBuffer;
 
 /** Video decoder output buffer containing video frame data. */
 public class VideoDecoderOutputBuffer extends OutputBuffer {
+
+  /** Buffer owner. */
+  public interface Owner {
+
+    /**
+     * Releases the buffer.
+     *
+     * @param outputBuffer Output buffer.
+     */
+    void releaseOutputBuffer(VideoDecoderOutputBuffer outputBuffer);
+  }
 
   // LINT.IfChange
   public static final int COLORSPACE_UNKNOWN = 0;
@@ -30,11 +40,11 @@ public class VideoDecoderOutputBuffer extends OutputBuffer {
   public static final int COLORSPACE_BT709 = 2;
   public static final int COLORSPACE_BT2020 = 3;
   // LINT.ThenChange(
-  //     ../../../../../../../../../../../../media/libraries/decoder_av1/src/main/jni/gav1_jni.cc,
-  //     ../../../../../../../../../../../../media/libraries/decoder_vp9/src/main/jni/vpx_jni.cc
+  //     ../../../../../../../../../../extensions/av1/src/main/jni/gav1_jni.cc,
+  //     ../../../../../../../../../../extensions/vp9/src/main/jni/vpx_jni.cc
   // )
 
-  /** Decoder private data. Used from native code. */
+  /** Decoder private data. */
   public int decoderPrivate;
 
   /** Output mode. */
@@ -44,8 +54,7 @@ public class VideoDecoderOutputBuffer extends OutputBuffer {
 
   public int width;
   public int height;
-  /** The format of the input from which this output buffer was decoded. */
-  @Nullable public Format format;
+  @Nullable public ColorInfo colorInfo;
 
   /** YUV planes for YUV mode. */
   @Nullable public ByteBuffer[] yuvPlanes;
@@ -59,14 +68,14 @@ public class VideoDecoderOutputBuffer extends OutputBuffer {
    */
   @Nullable public ByteBuffer supplementalData;
 
-  private final Owner<VideoDecoderOutputBuffer> owner;
+  private final Owner owner;
 
   /**
    * Creates VideoDecoderOutputBuffer.
    *
    * @param owner Buffer owner.
    */
-  public VideoDecoderOutputBuffer(Owner<VideoDecoderOutputBuffer> owner) {
+  public VideoDecoderOutputBuffer(Owner owner) {
     this.owner = owner;
   }
 

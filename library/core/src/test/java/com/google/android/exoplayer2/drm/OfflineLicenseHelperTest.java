@@ -24,9 +24,7 @@ import static org.mockito.Mockito.when;
 import android.util.Pair;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.drm.DrmInitData.SchemeData;
-import com.google.android.exoplayer2.drm.ExoMediaDrm.KeyRequest;
 import java.util.HashMap;
 import org.junit.After;
 import org.junit.Before;
@@ -34,14 +32,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.robolectric.annotation.LooperMode;
 
 /** Tests {@link OfflineLicenseHelper}. */
 @RunWith(AndroidJUnit4.class)
+@LooperMode(LooperMode.Mode.PAUSED)
 public class OfflineLicenseHelperTest {
 
-  private OfflineLicenseHelper offlineLicenseHelper;
+  private OfflineLicenseHelper<?> offlineLicenseHelper;
   @Mock private MediaDrmCallback mediaDrmCallback;
-  @Mock private ExoMediaDrm mediaDrm;
+  @Mock private ExoMediaDrm<ExoMediaCrypto> mediaDrm;
 
   @Before
   public void setUp() throws Exception {
@@ -49,17 +49,13 @@ public class OfflineLicenseHelperTest {
     when(mediaDrm.openSession()).thenReturn(new byte[] {1, 2, 3});
     when(mediaDrm.getKeyRequest(any(), any(), anyInt(), any()))
         .thenReturn(
-            new KeyRequest(
-                /* data= */ new byte[0],
-                /* licenseServerUrl= */ "",
-                KeyRequest.REQUEST_TYPE_INITIAL));
+            new ExoMediaDrm.KeyRequest(/* data= */ new byte[0], /* licenseServerUrl= */ ""));
     offlineLicenseHelper =
-        new OfflineLicenseHelper(
-            new DefaultDrmSessionManager.Builder()
-                .setUuidAndExoMediaDrmProvider(
-                    C.WIDEVINE_UUID, new ExoMediaDrm.AppManagedProvider(mediaDrm))
-                .build(mediaDrmCallback),
-            new DrmSessionEventListener.EventDispatcher());
+        new OfflineLicenseHelper<>(
+            C.WIDEVINE_UUID,
+            new ExoMediaDrm.AppManagedProvider<>(mediaDrm),
+            mediaDrmCallback,
+            null);
   }
 
   @After
@@ -69,14 +65,13 @@ public class OfflineLicenseHelperTest {
   }
 
   @Test
-  public void downloadRenewReleaseKey() throws Exception {
+  public void testDownloadRenewReleaseKey() throws Exception {
     setStubLicenseAndPlaybackDurationValues(1000, 200);
 
     byte[] keySetId = {2, 5, 8};
     setStubKeySetId(keySetId);
 
-    byte[] offlineLicenseKeySetId =
-        offlineLicenseHelper.downloadLicense(newFormatWithDrmInitData());
+    byte[] offlineLicenseKeySetId = offlineLicenseHelper.downloadLicense(newDrmInitData());
 
     assertOfflineLicenseKeySetIdEqual(keySetId, offlineLicenseKeySetId);
 
@@ -91,9 +86,9 @@ public class OfflineLicenseHelperTest {
   }
 
   @Test
-  public void downloadLicenseFailsIfNullDrmInitData() throws Exception {
+  public void testDownloadLicenseFailsIfNullInitData() throws Exception {
     try {
-      offlineLicenseHelper.downloadLicense(new Format.Builder().build());
+      offlineLicenseHelper.downloadLicense(null);
       fail();
     } catch (IllegalArgumentException e) {
       // Expected.
@@ -101,11 +96,11 @@ public class OfflineLicenseHelperTest {
   }
 
   @Test
-  public void downloadLicenseFailsIfNoKeySetIdIsReturned() throws Exception {
+  public void testDownloadLicenseFailsIfNoKeySetIdIsReturned() throws Exception {
     setStubLicenseAndPlaybackDurationValues(1000, 200);
 
     try {
-      offlineLicenseHelper.downloadLicense(newFormatWithDrmInitData());
+      offlineLicenseHelper.downloadLicense(newDrmInitData());
       fail();
     } catch (Exception e) {
       // Expected.
@@ -113,24 +108,22 @@ public class OfflineLicenseHelperTest {
   }
 
   @Test
-  public void downloadLicenseDoesNotFailIfDurationNotAvailable() throws Exception {
+  public void testDownloadLicenseDoesNotFailIfDurationNotAvailable() throws Exception {
     setDefaultStubKeySetId();
 
-    byte[] offlineLicenseKeySetId =
-        offlineLicenseHelper.downloadLicense(newFormatWithDrmInitData());
+    byte[] offlineLicenseKeySetId = offlineLicenseHelper.downloadLicense(newDrmInitData());
 
     assertThat(offlineLicenseKeySetId).isNotNull();
   }
 
   @Test
-  public void getLicenseDurationRemainingSec() throws Exception {
+  public void testGetLicenseDurationRemainingSec() throws Exception {
     long licenseDuration = 1000;
     int playbackDuration = 200;
     setStubLicenseAndPlaybackDurationValues(licenseDuration, playbackDuration);
     setDefaultStubKeySetId();
 
-    byte[] offlineLicenseKeySetId =
-        offlineLicenseHelper.downloadLicense(newFormatWithDrmInitData());
+    byte[] offlineLicenseKeySetId = offlineLicenseHelper.downloadLicense(newDrmInitData());
 
     Pair<Long, Long> licenseDurationRemainingSec =
         offlineLicenseHelper.getLicenseDurationRemainingSec(offlineLicenseKeySetId);
@@ -140,14 +133,13 @@ public class OfflineLicenseHelperTest {
   }
 
   @Test
-  public void getLicenseDurationRemainingSecExpiredLicense() throws Exception {
+  public void testGetLicenseDurationRemainingSecExpiredLicense() throws Exception {
     long licenseDuration = 0;
     int playbackDuration = 0;
     setStubLicenseAndPlaybackDurationValues(licenseDuration, playbackDuration);
     setDefaultStubKeySetId();
 
-    byte[] offlineLicenseKeySetId =
-        offlineLicenseHelper.downloadLicense(newFormatWithDrmInitData());
+    byte[] offlineLicenseKeySetId = offlineLicenseHelper.downloadLicense(newDrmInitData());
 
     Pair<Long, Long> licenseDurationRemainingSec =
         offlineLicenseHelper.getLicenseDurationRemainingSec(offlineLicenseKeySetId);
@@ -182,11 +174,8 @@ public class OfflineLicenseHelperTest {
     when(mediaDrm.queryKeyStatus(any(byte[].class))).thenReturn(keyStatus);
   }
 
-  private static Format newFormatWithDrmInitData() {
-    return new Format.Builder()
-        .setDrmInitData(
-            new DrmInitData(
-                new SchemeData(C.WIDEVINE_UUID, "mimeType", new byte[] {1, 4, 7, 0, 3, 6})))
-        .build();
+  private static DrmInitData newDrmInitData() {
+    return new DrmInitData(
+        new SchemeData(C.WIDEVINE_UUID, "mimeType", new byte[] {1, 4, 7, 0, 3, 6}));
   }
 }

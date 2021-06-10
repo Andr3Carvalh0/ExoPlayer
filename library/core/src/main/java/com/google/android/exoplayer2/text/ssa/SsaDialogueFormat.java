@@ -22,7 +22,7 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Assertions;
-import com.google.common.base.Ascii;
+import com.google.android.exoplayer2.util.Util;
 
 /**
  * Represents a {@code Format:} line from the {@code [Events]} section
@@ -61,7 +61,7 @@ import com.google.common.base.Ascii;
     Assertions.checkArgument(formatLine.startsWith(FORMAT_LINE_PREFIX));
     String[] keys = TextUtils.split(formatLine.substring(FORMAT_LINE_PREFIX.length()), ",");
     for (int i = 0; i < keys.length; i++) {
-      switch (Ascii.toLowerCase(keys[i].trim())) {
+      switch (Util.toLowerInvariant(keys[i].trim())) {
         case "start":
           startTimeIndex = i;
           break;
@@ -76,9 +76,7 @@ import com.google.common.base.Ascii;
           break;
       }
     }
-    return (startTimeIndex != C.INDEX_UNSET
-            && endTimeIndex != C.INDEX_UNSET
-            && textIndex != C.INDEX_UNSET)
+    return (startTimeIndex != C.INDEX_UNSET && endTimeIndex != C.INDEX_UNSET)
         ? new SsaDialogueFormat(startTimeIndex, endTimeIndex, styleIndex, textIndex, keys.length)
         : null;
   }

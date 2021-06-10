@@ -29,7 +29,9 @@ import com.google.android.exoplayer2.text.webvtt.Mp4WebvttDecoder;
 import com.google.android.exoplayer2.text.webvtt.WebvttDecoder;
 import com.google.android.exoplayer2.util.MimeTypes;
 
-/** A factory for {@link SubtitleDecoder} instances. */
+/**
+ * A factory for {@link SubtitleDecoder} instances.
+ */
 public interface SubtitleDecoderFactory {
 
   /**
@@ -106,10 +108,7 @@ public interface SubtitleDecoderFactory {
                 return new Tx3gDecoder(format.initializationData);
               case MimeTypes.APPLICATION_CEA608:
               case MimeTypes.APPLICATION_MP4CEA608:
-                return new Cea608Decoder(
-                    mimeType,
-                    format.accessibilityChannel,
-                    Cea608Decoder.MIN_DATA_CHANNEL_TIMEOUT_MS);
+                return new Cea608Decoder(mimeType, format.accessibilityChannel);
               case MimeTypes.APPLICATION_CEA708:
                 return new Cea708Decoder(format.accessibilityChannel, format.initializationData);
               case MimeTypes.APPLICATION_DVBSUBS:

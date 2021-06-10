@@ -21,12 +21,14 @@ import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.source.chunk.ChunkSource;
 import com.google.android.exoplayer2.source.dash.PlayerEmsgHandler.PlayerTrackEmsgHandler;
 import com.google.android.exoplayer2.source.dash.manifest.DashManifest;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.upstream.LoaderErrorThrower;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import java.util.List;
 
-/** A {@link ChunkSource} for DASH streams. */
+/**
+ * An {@link ChunkSource} for DASH streams.
+ */
 public interface DashChunkSource extends ChunkSource {
 
   /** Factory for {@link DashChunkSource}s. */
@@ -40,8 +42,7 @@ public interface DashChunkSource extends ChunkSource {
      * @param trackSelection The track selection.
      * @param elapsedRealtimeOffsetMs If known, an estimate of the instantaneous difference between
      *     server-side unix time and {@link SystemClock#elapsedRealtime()} in milliseconds,
-     *     specified as the server's unix time minus the local elapsed time. Or {@link
-     *     com.google.android.exoplayer2.C#TIME_UNSET} if unknown.
+     *     specified as the server's unix time minus the local elapsed time. If unknown, set to 0.
      * @param enableEventMessageTrack Whether to output an event message track.
      * @param closedCaptionFormats The {@link Format Formats} of closed caption tracks to be output.
      * @param transferListener The transfer listener which should be informed of any data transfers.
@@ -53,7 +54,7 @@ public interface DashChunkSource extends ChunkSource {
         DashManifest manifest,
         int periodIndex,
         int[] adaptationSetIndices,
-        ExoTrackSelection trackSelection,
+        TrackSelection trackSelection,
         int type,
         long elapsedRealtimeOffsetMs,
         boolean enableEventMessageTrack,
@@ -74,5 +75,5 @@ public interface DashChunkSource extends ChunkSource {
    *
    * @param trackSelection The new track selection instance. Must be equivalent to the previous one.
    */
-  void updateTrackSelection(ExoTrackSelection trackSelection);
+  void updateTrackSelection(TrackSelection trackSelection);
 }

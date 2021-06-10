@@ -26,7 +26,6 @@ import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.upstream.DummyDataSource;
 import com.google.android.exoplayer2.upstream.cache.Cache;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
-import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,7 +44,7 @@ public final class CacheAsserts {
       ArrayList<FakeData> allData = fakeDataSet.getAllData();
       dataSpecs = new DataSpec[allData.size()];
       for (int i = 0; i < dataSpecs.length; i++) {
-        dataSpecs[i] = new DataSpec(Assertions.checkNotNull(allData.get(i).uri));
+        dataSpecs[i] = new DataSpec(allData.get(i).uri);
       }
     }
 
@@ -75,7 +74,7 @@ public final class CacheAsserts {
     }
 
     public byte[] getData(int i) {
-      return Assertions.checkNotNull(fakeDataSet.getData(dataSpecs[i].uri)).getData();
+      return fakeDataSet.getData(dataSpecs[i].uri).getData();
     }
 
     public DataSpec getDataSpec(int i) {
@@ -83,10 +82,10 @@ public final class CacheAsserts {
     }
 
     public RequestSet useBoundedDataSpecFor(String uriString) {
-      FakeData data = Assertions.checkStateNotNull(fakeDataSet.getData(uriString));
+      FakeData data = fakeDataSet.getData(uriString);
       for (int i = 0; i < dataSpecs.length; i++) {
         DataSpec spec = dataSpecs[i];
-        if (Assertions.checkNotNull(spec.uri.getPath()).equals(uriString)) {
+        if (spec.uri.getPath().equals(uriString)) {
           dataSpecs[i] = spec.subrange(0, data.getData().length);
           return this;
         }
@@ -130,7 +129,7 @@ public final class CacheAsserts {
     byte[] bytes;
     try {
       dataSource.open(dataSpec);
-      bytes = Util.readToEnd(dataSource);
+      bytes = TestUtil.readToEnd(dataSource);
     } catch (IOException e) {
       throw new IOException("Opening/reading cache failed: " + dataSpec, e);
     } finally {
@@ -149,10 +148,13 @@ public final class CacheAsserts {
    */
   public static void assertReadData(DataSource dataSource, DataSpec dataSpec, byte[] expected)
       throws IOException {
+    byte[] bytes = null;
     try (DataSourceInputStream inputStream = new DataSourceInputStream(dataSource, dataSpec)) {
-      byte[] bytes = Util.toByteArray(inputStream);
-      assertThat(bytes).isEqualTo(expected);
+      bytes = Util.toByteArray(inputStream);
+    } catch (IOException e) {
+      // Ignore
     }
+    assertThat(bytes).isEqualTo(expected);
   }
 
   /** Asserts that the cache is empty. */

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parental_control_error">Ouderlijke pin vereist</string>
+    <string name="playback_control_error">Video gepauzeerd</string>
+</resources>

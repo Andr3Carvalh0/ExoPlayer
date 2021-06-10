@@ -26,7 +26,7 @@ import org.junit.runner.RunWith;
 public final class DefaultRenderersFactoryTest {
 
   @Test
-  public void createRenderers_instantiatesFlacRenderer() {
+  public void createRenderers_instantiatesVpxRenderer() {
     DefaultRenderersFactoryAsserts.assertExtensionRendererCreated(
         LibflacAudioRenderer.class, C.TRACK_TYPE_AUDIO);
   }

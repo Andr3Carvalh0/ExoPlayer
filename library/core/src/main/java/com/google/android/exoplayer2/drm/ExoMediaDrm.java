@@ -20,22 +20,17 @@ import android.media.MediaCryptoException;
 import android.media.MediaDrm;
 import android.media.MediaDrmException;
 import android.media.NotProvisionedException;
-import android.media.ResourceBusyException;
 import android.os.Handler;
 import android.os.PersistableBundle;
-import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.drm.DrmInitData.SchemeData;
-import java.lang.annotation.Documented;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Used to obtain keys for decrypting protected media streams.
+ * Used to obtain keys for decrypting protected media streams. See {@link android.media.MediaDrm}.
  *
  * <h3>Reference counting</h3>
  *
@@ -46,20 +41,18 @@ import java.util.UUID;
  * <p>Each new instance has an initial reference count of 1. Hence application code that creates a
  * new instance does not normally need to call {@link #acquire()}, and must call {@link #release()}
  * when the instance is no longer required.
- *
- * @see MediaDrm
  */
-public interface ExoMediaDrm {
+public interface ExoMediaDrm<T extends ExoMediaCrypto> {
 
-  /** Provider for {@link ExoMediaDrm} instances. */
-  interface Provider {
+  /** {@link ExoMediaDrm} instances provider. */
+  interface Provider<T extends ExoMediaCrypto> {
 
     /**
      * Returns an {@link ExoMediaDrm} instance with an incremented reference count. When the caller
-     * no longer needs the instance, it must call {@link ExoMediaDrm#release()} to decrement the
-     * reference count.
+     * no longer needs to use the instance, it must call {@link ExoMediaDrm#release()} to decrement
+     * the reference count.
      */
-    ExoMediaDrm acquireExoMediaDrm(UUID uuid);
+    ExoMediaDrm<T> acquireExoMediaDrm(UUID uuid);
   }
 
   /**
@@ -69,54 +62,56 @@ public interface ExoMediaDrm {
    * instance, and remains responsible for calling {@link ExoMediaDrm#release()} on the instance
    * when it's no longer being used.
    */
-  final class AppManagedProvider implements Provider {
+  final class AppManagedProvider<T extends ExoMediaCrypto> implements Provider<T> {
 
-    private final ExoMediaDrm exoMediaDrm;
+    private final ExoMediaDrm<T> exoMediaDrm;
 
     /** Creates an instance that provides the given {@link ExoMediaDrm}. */
-    public AppManagedProvider(ExoMediaDrm exoMediaDrm) {
+    public AppManagedProvider(ExoMediaDrm<T> exoMediaDrm) {
       this.exoMediaDrm = exoMediaDrm;
     }
 
     @Override
-    public ExoMediaDrm acquireExoMediaDrm(UUID uuid) {
+    public ExoMediaDrm<T> acquireExoMediaDrm(UUID uuid) {
       exoMediaDrm.acquire();
       return exoMediaDrm;
     }
   }
 
-  /** Event indicating that keys need to be requested from the license server. */
+  /** @see MediaDrm#EVENT_KEY_REQUIRED */
   @SuppressWarnings("InlinedApi")
   int EVENT_KEY_REQUIRED = MediaDrm.EVENT_KEY_REQUIRED;
-  /** Event indicating that keys have expired, and are no longer usable. */
+  /**
+   * @see MediaDrm#EVENT_KEY_EXPIRED
+   */
   @SuppressWarnings("InlinedApi")
   int EVENT_KEY_EXPIRED = MediaDrm.EVENT_KEY_EXPIRED;
-  /** Event indicating that a certificate needs to be requested from the provisioning server. */
+  /**
+   * @see MediaDrm#EVENT_PROVISION_REQUIRED
+   */
   @SuppressWarnings("InlinedApi")
   int EVENT_PROVISION_REQUIRED = MediaDrm.EVENT_PROVISION_REQUIRED;
 
   /**
-   * Key request type for keys that will be used for online use. Streaming keys will not be saved to
-   * the device for subsequent use when the device is not connected to a network.
+   * @see MediaDrm#KEY_TYPE_STREAMING
    */
   @SuppressWarnings("InlinedApi")
   int KEY_TYPE_STREAMING = MediaDrm.KEY_TYPE_STREAMING;
   /**
-   * Key request type for keys that will be used for offline use. They will be saved to the device
-   * for subsequent use when the device is not connected to a network.
+   * @see MediaDrm#KEY_TYPE_OFFLINE
    */
   @SuppressWarnings("InlinedApi")
   int KEY_TYPE_OFFLINE = MediaDrm.KEY_TYPE_OFFLINE;
-  /** Key request type indicating that saved offline keys should be released. */
+  /**
+   * @see MediaDrm#KEY_TYPE_RELEASE
+   */
   @SuppressWarnings("InlinedApi")
   int KEY_TYPE_RELEASE = MediaDrm.KEY_TYPE_RELEASE;
 
   /**
-   * Called when a DRM event occurs.
-   *
-   * @see MediaDrm.OnEventListener
+   * @see android.media.MediaDrm.OnEventListener
    */
-  interface OnEventListener {
+  interface OnEventListener<T extends ExoMediaCrypto> {
     /**
      * Called when an event occurs that requires the app to be notified
      *
@@ -127,7 +122,7 @@ public interface ExoMediaDrm {
      * @param data Optional byte array of data that may be associated with the event.
      */
     void onEvent(
-        ExoMediaDrm mediaDrm,
+        ExoMediaDrm<? extends T> mediaDrm,
         @Nullable byte[] sessionId,
         int event,
         int extra,
@@ -135,11 +130,9 @@ public interface ExoMediaDrm {
   }
 
   /**
-   * Called when the keys in a DRM session change state.
-   *
-   * @see MediaDrm.OnKeyStatusChangeListener
+   * @see android.media.MediaDrm.OnKeyStatusChangeListener
    */
-  interface OnKeyStatusChangeListener {
+  interface OnKeyStatusChangeListener<T extends ExoMediaCrypto> {
     /**
      * Called when the keys in a session change status, such as when the license is renewed or
      * expires.
@@ -150,246 +143,92 @@ public interface ExoMediaDrm {
      * @param hasNewUsableKey Whether a new key became usable.
      */
     void onKeyStatusChange(
-        ExoMediaDrm mediaDrm,
+        ExoMediaDrm<? extends T> mediaDrm,
         byte[] sessionId,
         List<KeyStatus> exoKeyInformation,
         boolean hasNewUsableKey);
   }
 
-  /**
-   * Called when a session expiration update occurs.
-   *
-   * @see MediaDrm.OnExpirationUpdateListener
-   */
-  interface OnExpirationUpdateListener {
-
-    /**
-     * Called when a session expiration update occurs, to inform the app about the change in
-     * expiration time.
-     *
-     * @param mediaDrm The {@link ExoMediaDrm} object on which the event occurred.
-     * @param sessionId The DRM session ID on which the event occurred
-     * @param expirationTimeMs The new expiration time for the keys in the session. The time is in
-     *     milliseconds, relative to the Unix epoch. A time of 0 indicates that the keys never
-     *     expire.
-     */
-    void onExpirationUpdate(ExoMediaDrm mediaDrm, byte[] sessionId, long expirationTimeMs);
-  }
-
-  /**
-   * Defines the status of a key.
-   *
-   * @see MediaDrm.KeyStatus
-   */
+  /** @see android.media.MediaDrm.KeyStatus */
   final class KeyStatus {
 
     private final int statusCode;
     private final byte[] keyId;
 
-    /**
-     * Creates an instance.
-     *
-     * @param statusCode The status code of the key, as defined by {@link
-     *     MediaDrm.KeyStatus#getStatusCode()}.
-     * @param keyId The ID of the key.
-     */
     public KeyStatus(int statusCode, byte[] keyId) {
       this.statusCode = statusCode;
       this.keyId = keyId;
     }
 
-    /** Returns the status of the key, as defined by {@link MediaDrm.KeyStatus#getStatusCode()}. */
     public int getStatusCode() {
       return statusCode;
     }
 
-    /** Returns the ID of the key. */
     public byte[] getKeyId() {
       return keyId;
     }
+
   }
 
-  /**
-   * Contains data used to request keys from a license server.
-   *
-   * @see MediaDrm.KeyRequest
-   */
+  /** @see android.media.MediaDrm.KeyRequest */
   final class KeyRequest {
-
-    /**
-     * Key request types. One of {@link #REQUEST_TYPE_UNKNOWN}, {@link #REQUEST_TYPE_INITIAL},
-     * {@link #REQUEST_TYPE_RENEWAL}, {@link #REQUEST_TYPE_RELEASE}, {@link #REQUEST_TYPE_NONE} or
-     * {@link #REQUEST_TYPE_UPDATE}.
-     */
-    @Documented
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-      REQUEST_TYPE_UNKNOWN,
-      REQUEST_TYPE_INITIAL,
-      REQUEST_TYPE_RENEWAL,
-      REQUEST_TYPE_RELEASE,
-      REQUEST_TYPE_NONE,
-      REQUEST_TYPE_UPDATE,
-    })
-    public @interface RequestType {}
-
-    /**
-     * Value returned from {@link #getRequestType()} if the underlying key request does not specify
-     * a type.
-     */
-    public static final int REQUEST_TYPE_UNKNOWN = Integer.MIN_VALUE;
-
-    /** Key request type for an initial license request. */
-    public static final int REQUEST_TYPE_INITIAL = MediaDrm.KeyRequest.REQUEST_TYPE_INITIAL;
-    /** Key request type for license renewal. */
-    public static final int REQUEST_TYPE_RENEWAL = MediaDrm.KeyRequest.REQUEST_TYPE_RENEWAL;
-    /** Key request type for license release. */
-    public static final int REQUEST_TYPE_RELEASE = MediaDrm.KeyRequest.REQUEST_TYPE_RELEASE;
-    /**
-     * Key request type if keys are already loaded and available for use. No license request is
-     * necessary, and no key request data is returned.
-     */
-    public static final int REQUEST_TYPE_NONE = MediaDrm.KeyRequest.REQUEST_TYPE_NONE;
-    /**
-     * Key request type if keys have been loaded, but an additional license request is needed to
-     * update their values.
-     */
-    public static final int REQUEST_TYPE_UPDATE = MediaDrm.KeyRequest.REQUEST_TYPE_UPDATE;
 
     private final byte[] data;
     private final String licenseServerUrl;
-    @RequestType private final int requestType;
 
-    /**
-     * Creates an instance with {@link #REQUEST_TYPE_UNKNOWN}.
-     *
-     * @param data The opaque key request data.
-     * @param licenseServerUrl The license server URL to which the request should be made.
-     */
     public KeyRequest(byte[] data, String licenseServerUrl) {
-      this(data, licenseServerUrl, REQUEST_TYPE_UNKNOWN);
-    }
-
-    /**
-     * Creates an instance.
-     *
-     * @param data The opaque key request data.
-     * @param licenseServerUrl The license server URL to which the request should be made.
-     * @param requestType The type of the request, or {@link #REQUEST_TYPE_UNKNOWN}.
-     */
-    public KeyRequest(byte[] data, String licenseServerUrl, @RequestType int requestType) {
       this.data = data;
       this.licenseServerUrl = licenseServerUrl;
-      this.requestType = requestType;
     }
 
-    /** Returns the opaque key request data. */
     public byte[] getData() {
       return data;
     }
 
-    /** Returns the URL of the license server to which the request should be made. */
     public String getLicenseServerUrl() {
       return licenseServerUrl;
     }
 
-    /**
-     * Returns the type of the request, or {@link #REQUEST_TYPE_UNKNOWN} if the underlying key
-     * request does not specify a type. Note that when using a platform {@link MediaDrm} instance,
-     * key requests only specify a type on API levels 23 and above.
-     */
-    @RequestType
-    public int getRequestType() {
-      return requestType;
-    }
   }
 
-  /**
-   * Contains data to request a certificate from a provisioning server.
-   *
-   * @see MediaDrm.ProvisionRequest
-   */
+  /** @see android.media.MediaDrm.ProvisionRequest */
   final class ProvisionRequest {
 
     private final byte[] data;
     private final String defaultUrl;
 
-    /**
-     * Creates an instance.
-     *
-     * @param data The opaque provisioning request data.
-     * @param defaultUrl The default URL of the provisioning server to which the request can be
-     *     made, or the empty string if not known.
-     */
     public ProvisionRequest(byte[] data, String defaultUrl) {
       this.data = data;
       this.defaultUrl = defaultUrl;
     }
 
-    /** Returns the opaque provisioning request data. */
     public byte[] getData() {
       return data;
     }
 
-    /**
-     * Returns the default URL of the provisioning server to which the request can be made, or the
-     * empty string if not known.
-     */
     public String getDefaultUrl() {
       return defaultUrl;
     }
+
   }
 
   /**
-   * Sets the listener for DRM events.
-   *
-   * <p>This is an optional method, and some implementations may only support it on certain Android
-   * API levels.
-   *
-   * @param listener The listener to receive events, or {@code null} to stop receiving events.
-   * @throws UnsupportedOperationException if the implementation doesn't support this method.
    * @see MediaDrm#setOnEventListener(MediaDrm.OnEventListener)
    */
-  void setOnEventListener(@Nullable OnEventListener listener);
+  void setOnEventListener(OnEventListener<? super T> listener);
 
   /**
-   * Sets the listener for key status change events.
-   *
-   * <p>This is an optional method, and some implementations may only support it on certain Android
-   * API levels.
-   *
-   * @param listener The listener to receive events, or {@code null} to stop receiving events.
-   * @throws UnsupportedOperationException if the implementation doesn't support this method.
    * @see MediaDrm#setOnKeyStatusChangeListener(MediaDrm.OnKeyStatusChangeListener, Handler)
    */
-  void setOnKeyStatusChangeListener(@Nullable OnKeyStatusChangeListener listener);
+  void setOnKeyStatusChangeListener(OnKeyStatusChangeListener<? super T> listener);
 
   /**
-   * Sets the listener for session expiration events.
-   *
-   * <p>This is an optional method, and some implementations may only support it on certain Android
-   * API levels.
-   *
-   * @param listener The listener to receive events, or {@code null} to stop receiving events.
-   * @throws UnsupportedOperationException if the implementation doesn't support this method.
-   * @see MediaDrm#setOnExpirationUpdateListener(MediaDrm.OnExpirationUpdateListener, Handler)
-   */
-  void setOnExpirationUpdateListener(@Nullable OnExpirationUpdateListener listener);
-
-  /**
-   * Opens a new DRM session. A session ID is returned.
-   *
-   * @return The session ID.
-   * @throws NotProvisionedException If provisioning is needed.
-   * @throws ResourceBusyException If required resources are in use.
-   * @throws MediaDrmException If the session could not be opened.
+   * @see MediaDrm#openSession()
    */
   byte[] openSession() throws MediaDrmException;
 
   /**
-   * Closes a DRM session.
-   *
-   * @param sessionId The ID of the session to close.
+   * @see MediaDrm#closeSession(byte[])
    */
   void closeSession(byte[] sessionId);
 
@@ -397,8 +236,8 @@ public interface ExoMediaDrm {
    * Generates a key request.
    *
    * @param scope If {@code keyType} is {@link #KEY_TYPE_STREAMING} or {@link #KEY_TYPE_OFFLINE},
-   *     the ID of the session that the keys will be provided to. If {@code keyType} is {@link
-   *     #KEY_TYPE_RELEASE}, the {@code keySetId} of the keys to release.
+   *     the session id that the keys will be provided to. If {@code keyType} is {@link
+   *     #KEY_TYPE_RELEASE}, the keySetId of the keys to release.
    * @param schemeDatas If key type is {@link #KEY_TYPE_STREAMING} or {@link #KEY_TYPE_OFFLINE}, a
    *     list of {@link SchemeData} instances extracted from the media. Null otherwise.
    * @param keyType The type of the request. Either {@link #KEY_TYPE_STREAMING} to acquire keys for
@@ -418,45 +257,23 @@ public interface ExoMediaDrm {
       @Nullable HashMap<String, String> optionalParameters)
       throws NotProvisionedException;
 
-  /**
-   * Provides a key response for the last request to be generated using {@link #getKeyRequest}.
-   *
-   * @param scope If the request had type {@link #KEY_TYPE_STREAMING} or {@link #KEY_TYPE_OFFLINE},
-   *     the ID of the session to provide the keys to. If {@code keyType} is {@link
-   *     #KEY_TYPE_RELEASE}, the {@code keySetId} of the keys being released.
-   * @param response The response data from the server.
-   * @return If the request had type {@link #KEY_TYPE_OFFLINE}, the {@code keySetId} for the offline
-   *     keys. An empty byte array or {@code null} may be returned for other cases.
-   * @throws NotProvisionedException If the response indicates that provisioning is needed.
-   * @throws DeniedByServerException If the response indicates that the server rejected the request.
-   */
+  /** @see MediaDrm#provideKeyResponse(byte[], byte[]) */
   @Nullable
   byte[] provideKeyResponse(byte[] scope, byte[] response)
       throws NotProvisionedException, DeniedByServerException;
 
   /**
-   * Generates a provisioning request.
-   *
-   * @return The generated provisioning request.
+   * @see MediaDrm#getProvisionRequest()
    */
   ProvisionRequest getProvisionRequest();
 
   /**
-   * Provides a provisioning response for the last request to be generated using {@link
-   * #getProvisionRequest()}.
-   *
-   * @param response The response data from the server.
-   * @throws DeniedByServerException If the response indicates that the server rejected the request.
+   * @see MediaDrm#provideProvisionResponse(byte[])
    */
   void provideProvisionResponse(byte[] response) throws DeniedByServerException;
 
   /**
-   * Returns the key status for a given session, as {name, value} pairs. Since DRM license policies
-   * vary by vendor, the returned entries depend on the DRM plugin being used. Refer to your DRM
-   * provider's documentation for more information.
-   *
-   * @param sessionId The ID of the session being queried.
-   * @return The key status for the session.
+   * @see MediaDrm#queryKeyStatus(byte[])
    */
   Map<String, String> queryKeyStatus(byte[] sessionId);
 
@@ -476,67 +293,50 @@ public interface ExoMediaDrm {
   void release();
 
   /**
-   * Restores persisted offline keys into a session.
-   *
-   * @param sessionId The ID of the session into which the keys will be restored.
-   * @param keySetId The {@code keySetId} of the keys to restore, as provided by the call to {@link
-   *     #provideKeyResponse} that persisted them.
+   * @see MediaDrm#restoreKeys(byte[], byte[])
    */
   void restoreKeys(byte[] sessionId, byte[] keySetId);
 
   /**
-   * Returns metrics data for this ExoMediaDrm instance, or {@code null} if metrics are unavailable.
+   * Returns drm metrics. May be null if unavailable.
+   *
+   * @see MediaDrm#getMetrics()
    */
   @Nullable
   PersistableBundle getMetrics();
 
   /**
-   * Returns the value of a string property. For standard property names, see {@link
-   * MediaDrm#getPropertyString}.
-   *
-   * @param propertyName The property name.
-   * @return The property value.
-   * @throws IllegalArgumentException If the underlying DRM plugin does not support the property.
+   * @see MediaDrm#getPropertyString(String)
    */
   String getPropertyString(String propertyName);
 
   /**
-   * Returns the value of a byte array property. For standard property names, see {@link
-   * MediaDrm#getPropertyByteArray}.
-   *
-   * @param propertyName The property name.
-   * @return The property value.
-   * @throws IllegalArgumentException If the underlying DRM plugin does not support the property.
+   * @see MediaDrm#getPropertyByteArray(String)
    */
   byte[] getPropertyByteArray(String propertyName);
 
   /**
-   * Sets the value of a string property.
-   *
-   * @param propertyName The property name.
-   * @param value The value.
-   * @throws IllegalArgumentException If the underlying DRM plugin does not support the property.
+   * @see MediaDrm#setPropertyString(String, String)
    */
   void setPropertyString(String propertyName, String value);
 
   /**
-   * Sets the value of a byte array property.
-   *
-   * @param propertyName The property name.
-   * @param value The value.
-   * @throws IllegalArgumentException If the underlying DRM plugin does not support the property.
+   * @see MediaDrm#setPropertyByteArray(String, byte[])
    */
   void setPropertyByteArray(String propertyName, byte[] value);
 
   /**
-   * Creates an {@link ExoMediaCrypto} for a given session.
-   *
-   * @param sessionId The ID of the session.
-   * @return An {@link ExoMediaCrypto} for the given session.
-   * @throws MediaCryptoException If an {@link ExoMediaCrypto} could not be created.
+   * @see android.media.MediaCrypto#MediaCrypto(UUID, byte[])
+   * @param sessionId The DRM session ID.
+   * @return An object extends {@link ExoMediaCrypto}, using opaque crypto scheme specific data.
+   * @throws MediaCryptoException If the instance can't be created.
    */
-  ExoMediaCrypto createMediaCrypto(byte[] sessionId) throws MediaCryptoException;
+  T createMediaCrypto(byte[] sessionId) throws MediaCryptoException;
 
-  /** Returns the {@link ExoMediaCrypto} type created by {@link #createMediaCrypto(byte[])}. */
-  Class<? extends ExoMediaCrypto> getExoMediaCryptoType();
+  /**
+   * Returns the {@link ExoMediaCrypto} type created by {@link #createMediaCrypto(byte[])}, or null
+   * if this instance cannot create any {@link ExoMediaCrypto} instances.
+   */
+  @Nullable
+  Class<T> getExoMediaCryptoType();
 }

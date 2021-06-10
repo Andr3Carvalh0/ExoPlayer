@@ -27,10 +27,6 @@ import com.google.android.gms.cast.MediaTrack;
  */
 /* package */ final class CastUtils {
 
-  /** The duration returned by {@link MediaInfo#getStreamDuration()} for live streams. */
-  // TODO: Remove once [Internal ref: b/171657375] is fixed.
-  private static final long LIVE_STREAM_DURATION = -1000;
-
   /**
    * Returns the duration in microseconds advertised by a media info, or {@link C#TIME_UNSET} if
    * unknown or not applicable.
@@ -43,9 +39,7 @@ import com.google.android.gms.cast.MediaTrack;
       return C.TIME_UNSET;
     }
     long durationMs = mediaInfo.getStreamDuration();
-    return durationMs != MediaInfo.UNKNOWN_DURATION && durationMs != LIVE_STREAM_DURATION
-        ? C.msToUs(durationMs)
-        : C.TIME_UNSET;
+    return durationMs != MediaInfo.UNKNOWN_DURATION ? C.msToUs(durationMs) : C.TIME_UNSET;
   }
 
   /**
@@ -110,11 +104,16 @@ import com.google.android.gms.cast.MediaTrack;
    * @return The equivalent {@link Format}.
    */
   public static Format mediaTrackToFormat(MediaTrack mediaTrack) {
-    return new Format.Builder()
-        .setId(mediaTrack.getContentId())
-        .setContainerMimeType(mediaTrack.getContentType())
-        .setLanguage(mediaTrack.getLanguage())
-        .build();
+    return Format.createContainerFormat(
+        mediaTrack.getContentId(),
+        /* label= */ null,
+        mediaTrack.getContentType(),
+        /* sampleMimeType= */ null,
+        /* codecs= */ null,
+        /* bitrate= */ Format.NO_VALUE,
+        /* selectionFlags= */ 0,
+        /* roleFlags= */ 0,
+        mediaTrack.getLanguage());
   }
 
   private CastUtils() {}

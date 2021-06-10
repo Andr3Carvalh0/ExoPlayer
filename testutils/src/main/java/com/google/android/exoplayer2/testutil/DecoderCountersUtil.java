@@ -19,7 +19,9 @@ import static com.google.common.truth.Truth.assertWithMessage;
 
 import com.google.android.exoplayer2.decoder.DecoderCounters;
 
-/** Assertions for {@link DecoderCounters}. */
+/**
+ * Assertions for {@link DecoderCounters}.
+ */
 public final class DecoderCountersUtil {
 
   private DecoderCountersUtil() {}
@@ -96,20 +98,4 @@ public final class DecoderCountersUtil {
         .isAtMost(limit);
   }
 
-  public static void assertVideoFrameProcessingOffsetSampleCount(
-      String name, DecoderCounters counters, int minCount, int maxCount) {
-    int actual = counters.videoFrameProcessingOffsetCount;
-    assertWithMessage(
-            "Codec("
-                + name
-                + ") videoFrameProcessingOffsetSampleCount "
-                + actual
-                + ". Expected in range ["
-                + minCount
-                + ", "
-                + maxCount
-                + "].")
-        .that(minCount <= actual && actual <= maxCount)
-        .isTrue();
-  }
 }

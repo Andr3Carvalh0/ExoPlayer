@@ -20,10 +20,12 @@ package com.google.android.exoplayer2.text;
  */
 /* package */ final class SimpleSubtitleOutputBuffer extends SubtitleOutputBuffer {
 
-  private final Owner<SubtitleOutputBuffer> owner;
+  private final SimpleSubtitleDecoder owner;
 
-  /** @param owner The decoder that owns this buffer. */
-  public SimpleSubtitleOutputBuffer(Owner<SubtitleOutputBuffer> owner) {
+  /**
+   * @param owner The decoder that owns this buffer.
+   */
+  public SimpleSubtitleOutputBuffer(SimpleSubtitleDecoder owner) {
     super();
     this.owner = owner;
   }

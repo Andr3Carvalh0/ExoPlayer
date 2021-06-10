@@ -21,15 +21,12 @@ import static org.junit.Assert.fail;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Looper;
-import androidx.annotation.Nullable;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
-import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.Player;
-import com.google.android.exoplayer2.Renderer;
-import com.google.android.exoplayer2.RenderersFactory;
-import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.extractor.mkv.MatroskaExtractor;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
@@ -44,11 +41,10 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public class VpxPlaybackTest {
 
-  private static final String BEAR_URI = "asset:///media/vp9/bear-vp9.webm";
-  private static final String BEAR_ODD_DIMENSIONS_URI =
-      "asset:///media/vp9/bear-vp9-odd-dimensions.webm";
-  private static final String ROADTRIP_10BIT_URI = "asset:///media/vp9/roadtrip-vp92-10bit.webm";
-  private static final String INVALID_BITSTREAM_URI = "asset:///media/vp9/invalid-bitstream.webm";
+  private static final String BEAR_URI = "asset:///bear-vp9.webm";
+  private static final String BEAR_ODD_DIMENSIONS_URI = "asset:///bear-vp9-odd-dimensions.webm";
+  private static final String ROADTRIP_10BIT_URI = "asset:///roadtrip-vp92-10bit.webm";
+  private static final String INVALID_BITSTREAM_URI = "asset:///invalid-bitstream.webm";
 
   private static final String TAG = "VpxPlaybackTest";
 
@@ -60,12 +56,12 @@ public class VpxPlaybackTest {
   }
 
   @Test
-  public void basicPlayback() throws Exception {
+  public void testBasicPlayback() throws Exception {
     playUri(BEAR_URI);
   }
 
   @Test
-  public void oddDimensionsPlayback() throws Exception {
+  public void testOddDimensionsPlayback() throws Exception {
     playUri(BEAR_ODD_DIMENSIONS_URI);
   }
 
@@ -80,7 +76,7 @@ public class VpxPlaybackTest {
   }
 
   @Test
-  public void invalidBitstream() {
+  public void testInvalidBitstream() {
     try {
       playUri(INVALID_BITSTREAM_URI);
       fail();
@@ -101,13 +97,13 @@ public class VpxPlaybackTest {
     }
   }
 
-  private static class TestPlaybackRunnable implements Player.Listener, Runnable {
+  private static class TestPlaybackRunnable implements Player.EventListener, Runnable {
 
     private final Context context;
     private final Uri uri;
 
-    @Nullable private SimpleExoPlayer player;
-    @Nullable private ExoPlaybackException playbackException;
+    private ExoPlayer player;
+    private ExoPlaybackException playbackException;
 
     public TestPlaybackRunnable(Uri uri, Context context) {
       this.uri = uri;
@@ -117,29 +113,21 @@ public class VpxPlaybackTest {
     @Override
     public void run() {
       Looper.prepare();
-      RenderersFactory renderersFactory =
-          (eventHandler,
-              videoRendererEventListener,
-              audioRendererEventListener,
-              textRendererOutput,
-              metadataRendererOutput) ->
-              new Renderer[] {
-                new LibvpxVideoRenderer(
-                    /* allowedJoiningTimeMs= */ 0,
-                    eventHandler,
-                    videoRendererEventListener,
-                    /* maxDroppedFramesToNotify= */ -1)
-              };
-      player = new SimpleExoPlayer.Builder(context, renderersFactory).build();
+      LibvpxVideoRenderer videoRenderer = new LibvpxVideoRenderer(0);
+      player = new ExoPlayer.Builder(context, videoRenderer).build();
       player.addListener(this);
       MediaSource mediaSource =
           new ProgressiveMediaSource.Factory(
-                  new DefaultDataSourceFactory(context), MatroskaExtractor.FACTORY)
-              .createMediaSource(MediaItem.fromUri(uri));
-      player.setVideoSurfaceView(new VideoDecoderGLSurfaceView(context));
-      player.setMediaSource(mediaSource);
-      player.prepare();
-      player.play();
+                  new DefaultDataSourceFactory(context, "ExoPlayerExtVp9Test"),
+                  MatroskaExtractor.FACTORY)
+              .createMediaSource(uri);
+      player
+          .createMessage(videoRenderer)
+          .setType(C.MSG_SET_VIDEO_DECODER_OUTPUT_BUFFER_RENDERER)
+          .setPayload(new VideoDecoderGLSurfaceView(context).getVideoDecoderOutputBufferRenderer())
+          .send();
+      player.prepare(mediaSource);
+      player.setPlayWhenReady(true);
       Looper.loop();
     }
 
@@ -149,7 +137,7 @@ public class VpxPlaybackTest {
     }
 
     @Override
-    public void onPlaybackStateChanged(@Player.State int playbackState) {
+    public void onPlayerStateChanged(boolean playWhenReady, @Player.State int playbackState) {
       if (playbackState == Player.STATE_ENDED
           || (playbackState == Player.STATE_IDLE && playbackException != null)) {
         player.release();

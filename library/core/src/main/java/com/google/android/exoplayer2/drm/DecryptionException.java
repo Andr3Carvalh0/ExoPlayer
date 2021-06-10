@@ -15,7 +15,9 @@
  */
 package com.google.android.exoplayer2.drm;
 
-/** Thrown when a non-platform component fails to decrypt data. */
+/**
+ * Thrown when a non-platform component fails to decrypt data.
+ */
 public class DecryptionException extends Exception {
 
   /**

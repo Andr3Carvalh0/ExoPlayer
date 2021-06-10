@@ -15,114 +15,31 @@
  */
 package com.google.android.exoplayer2.testutil;
 
-import static com.google.android.exoplayer2.util.Assertions.checkNotNull;
-
-import android.os.Build;
-import android.os.Handler;
 import android.os.Handler.Callback;
 import android.os.Looper;
-import android.os.SystemClock;
-import androidx.annotation.GuardedBy;
-import androidx.annotation.Nullable;
+import android.os.Message;
 import com.google.android.exoplayer2.util.Clock;
 import com.google.android.exoplayer2.util.HandlerWrapper;
-import com.google.common.collect.ComparisonChain;
-import com.google.common.collect.Ordering;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
-/**
- * Fake {@link Clock} implementation that allows to {@link #advanceTime(long) advance the time}
- * manually to trigger pending timed messages.
- *
- * <p>All timed messages sent by a {@link #createHandler(Looper, Callback) Handler} created from
- * this clock are governed by the clock's time. Messages sent through these handlers are not
- * triggered until previous messages on any thread have been handled to ensure deterministic
- * execution. Note that this includes messages sent from the main Robolectric test thread, meaning
- * that these messages are only triggered if the main test thread is idle, which can be explicitly
- * requested by calling {@code ShadowLooper.idleMainLooper()}.
- *
- * <p>The clock also sets the time of the {@link SystemClock} to match the {@link #elapsedRealtime()
- * clock's time}.
- */
+/** Fake {@link Clock} implementation independent of {@link android.os.SystemClock}. */
 public class FakeClock implements Clock {
 
-  private static long messageIdProvider = 0;
+  private final List<Long> wakeUpTimes;
+  private final List<HandlerMessageData> handlerMessages;
 
-  private final boolean isRobolectric;
-  private final boolean isAutoAdvancing;
-
-  @GuardedBy("this")
-  private final List<HandlerMessage> handlerMessages;
-
-  @GuardedBy("this")
-  private final Set<Looper> busyLoopers;
-
-  @GuardedBy("this")
-  private final long bootTimeMs;
-
-  @GuardedBy("this")
-  private long timeSinceBootMs;
-
-  @GuardedBy("this")
-  private boolean waitingForMessage;
+  private long currentTimeMs;
 
   /**
-   * Creates a fake clock that doesn't auto-advance and assumes that the system was booted exactly
-   * at time {@code 0} (the Unix Epoch) and {@code initialTimeMs} milliseconds have passed since
-   * system boot.
+   * Create {@link FakeClock} with an arbitrary initial timestamp.
    *
-   * @param initialTimeMs The initial elapsed time since the boot time, in milliseconds.
+   * @param initialTimeMs Initial timestamp in milliseconds.
    */
   public FakeClock(long initialTimeMs) {
-    this(/* bootTimeMs= */ 0, initialTimeMs, /* isAutoAdvancing= */ false);
-  }
-
-  /**
-   * Creates a fake clock that assumes that the system was booted exactly at time {@code 0} (the
-   * Unix Epoch) and an {@code initialTimeMs} of {@code 0}.
-   *
-   * @param isAutoAdvancing Whether the clock should automatically advance the time to the time of
-   *     next message that is due to be sent.
-   */
-  public FakeClock(boolean isAutoAdvancing) {
-    this(/* bootTimeMs= */ 0, /* initialTimeMs= */ 0, isAutoAdvancing);
-  }
-
-  /**
-   * Creates a fake clock that assumes that the system was booted exactly at time {@code 0} (the
-   * Unix Epoch) and {@code initialTimeMs} milliseconds have passed since system boot.
-   *
-   * @param initialTimeMs The initial elapsed time since the boot time, in milliseconds.
-   * @param isAutoAdvancing Whether the clock should automatically advance the time to the time of
-   *     next message that is due to be sent.
-   */
-  public FakeClock(long initialTimeMs, boolean isAutoAdvancing) {
-    this(/* bootTimeMs= */ 0, initialTimeMs, isAutoAdvancing);
-  }
-
-  /**
-   * Creates a fake clock specifying when the system was booted and how much time has passed since
-   * then.
-   *
-   * @param bootTimeMs The time the system was booted since the Unix Epoch, in milliseconds.
-   * @param initialTimeMs The initial elapsed time since the boot time, in milliseconds.
-   * @param isAutoAdvancing Whether the clock should automatically advance the time to the time of
-   *     next message that is due to be sent.
-   */
-  public FakeClock(long bootTimeMs, long initialTimeMs, boolean isAutoAdvancing) {
-    this.bootTimeMs = bootTimeMs;
-    this.timeSinceBootMs = initialTimeMs;
-    this.isAutoAdvancing = isAutoAdvancing;
+    this.currentTimeMs = initialTimeMs;
+    this.wakeUpTimes = new ArrayList<>();
     this.handlerMessages = new ArrayList<>();
-    this.busyLoopers = new HashSet<>();
-    this.isRobolectric = "robolectric".equals(Build.FINGERPRINT);
-    if (isRobolectric) {
-      SystemClock.setCurrentTimeMillis(initialTimeMs);
-    }
   }
 
   /**
@@ -131,18 +48,23 @@ public class FakeClock implements Clock {
    * @param timeDiffMs The amount of time to add to the timestamp in milliseconds.
    */
   public synchronized void advanceTime(long timeDiffMs) {
-    advanceTimeInternal(timeDiffMs);
-    maybeTriggerMessage();
-  }
-
-  @Override
-  public synchronized long currentTimeMillis() {
-    return bootTimeMs + timeSinceBootMs;
+    currentTimeMs += timeDiffMs;
+    for (Long wakeUpTime : wakeUpTimes) {
+      if (wakeUpTime <= currentTimeMs) {
+        notifyAll();
+        break;
+      }
+    }
+    for (int i = handlerMessages.size() - 1; i >= 0; i--) {
+      if (handlerMessages.get(i).maybeSendToTarget(currentTimeMs)) {
+        handlerMessages.remove(i);
+      }
+    }
   }
 
   @Override
   public synchronized long elapsedRealtime() {
-    return timeSinceBootMs;
+    return currentTimeMs;
   }
 
   @Override
@@ -151,193 +73,90 @@ public class FakeClock implements Clock {
   }
 
   @Override
-  public HandlerWrapper createHandler(Looper looper, @Nullable Callback callback) {
-    return new ClockHandler(looper, callback);
+  public synchronized void sleep(long sleepTimeMs) {
+    if (sleepTimeMs <= 0) {
+      return;
+    }
+    Long wakeUpTimeMs = currentTimeMs + sleepTimeMs;
+    wakeUpTimes.add(wakeUpTimeMs);
+    while (currentTimeMs < wakeUpTimeMs) {
+      try {
+        wait();
+      } catch (InterruptedException e) {
+        // Ignore InterruptedException as SystemClock.sleep does too.
+      }
+    }
+    wakeUpTimes.remove(wakeUpTimeMs);
   }
 
   @Override
-  public synchronized void onThreadBlocked() {
-    @Nullable Looper currentLooper = Looper.myLooper();
-    if (currentLooper == null || !waitingForMessage) {
-      // This isn't a looper message created by this class, so no need to handle the blocking.
-      return;
-    }
-    busyLoopers.add(checkNotNull(Looper.myLooper()));
-    waitingForMessage = false;
-    maybeTriggerMessage();
+  public HandlerWrapper createHandler(Looper looper, Callback callback) {
+    return new ClockHandler(looper, callback);
   }
 
-  /** Adds a message to the list of pending messages. */
-  protected synchronized void addPendingHandlerMessage(HandlerMessage message) {
-    handlerMessages.add(message);
-    if (!waitingForMessage) {
-      // This method isn't executed from inside a looper message created by this class.
-      @Nullable Looper currentLooper = Looper.myLooper();
-      if (currentLooper == null) {
-        // This message is triggered from a non-looper thread, so just execute it directly.
-        maybeTriggerMessage();
-      } else {
-        // Make sure the current looper message is finished before handling the new message.
-        waitingForMessage = true;
-        new Handler(checkNotNull(Looper.myLooper())).post(this::onMessageHandled);
-      }
+  /** Adds a handler post to list of pending messages. */
+  protected synchronized boolean addHandlerMessageAtTime(
+      HandlerWrapper handler, Runnable runnable, long timeMs) {
+    if (timeMs <= currentTimeMs) {
+      return handler.post(runnable);
     }
+    handlerMessages.add(new HandlerMessageData(timeMs, handler, runnable));
+    return true;
   }
 
-  private synchronized void removePendingHandlerMessages(ClockHandler handler, int what) {
-    for (int i = handlerMessages.size() - 1; i >= 0; i--) {
-      HandlerMessage message = handlerMessages.get(i);
-      if (message.handler.equals(handler) && message.what == what) {
-        handlerMessages.remove(i);
-      }
+  /** Adds an empty handler message to list of pending messages. */
+  protected synchronized boolean addHandlerMessageAtTime(
+      HandlerWrapper handler, int message, long timeMs) {
+    if (timeMs <= currentTimeMs) {
+      return handler.sendEmptyMessage(message);
     }
-    handler.handler.removeMessages(what);
-  }
-
-  private synchronized void removePendingHandlerMessages(
-      ClockHandler handler, @Nullable Object token) {
-    for (int i = handlerMessages.size() - 1; i >= 0; i--) {
-      HandlerMessage message = handlerMessages.get(i);
-      if (message.handler.equals(handler) && (token == null || message.obj == token)) {
-        handlerMessages.remove(i);
-      }
-    }
-    handler.handler.removeCallbacksAndMessages(token);
-  }
-
-  private synchronized boolean hasPendingMessage(ClockHandler handler, int what) {
-    for (int i = 0; i < handlerMessages.size(); i++) {
-      HandlerMessage message = handlerMessages.get(i);
-      if (message.handler.equals(handler) && message.what == what) {
-        return true;
-      }
-    }
-    return handler.handler.hasMessages(what);
-  }
-
-  private synchronized void maybeTriggerMessage() {
-    if (waitingForMessage) {
-      return;
-    }
-    if (handlerMessages.isEmpty()) {
-      return;
-    }
-    Collections.sort(handlerMessages);
-    int messageIndex = 0;
-    HandlerMessage message = handlerMessages.get(messageIndex);
-    int messageCount = handlerMessages.size();
-    while (busyLoopers.contains(message.handler.getLooper()) && messageIndex < messageCount) {
-      messageIndex++;
-      if (messageIndex == messageCount) {
-        return;
-      }
-      message = handlerMessages.get(messageIndex);
-    }
-    if (message.timeMs > timeSinceBootMs) {
-      if (isAutoAdvancing) {
-        advanceTimeInternal(message.timeMs - timeSinceBootMs);
-      } else {
-        return;
-      }
-    }
-    handlerMessages.remove(messageIndex);
-    waitingForMessage = true;
-    if (message.runnable != null) {
-      message.handler.handler.post(message.runnable);
-    } else {
-      message
-          .handler
-          .handler
-          .obtainMessage(message.what, message.arg1, message.arg2, message.obj)
-          .sendToTarget();
-    }
-    message.handler.internalHandler.post(this::onMessageHandled);
-  }
-
-  private synchronized void onMessageHandled() {
-    busyLoopers.remove(Looper.myLooper());
-    waitingForMessage = false;
-    maybeTriggerMessage();
-  }
-
-  private synchronized void advanceTimeInternal(long timeDiffMs) {
-    timeSinceBootMs += timeDiffMs;
-    if (isRobolectric) {
-      SystemClock.setCurrentTimeMillis(timeSinceBootMs);
-    }
-  }
-
-  private static synchronized long getNextMessageId() {
-    return messageIdProvider++;
+    handlerMessages.add(new HandlerMessageData(timeMs, handler, message));
+    return true;
   }
 
   /** Message data saved to send messages or execute runnables at a later time on a Handler. */
-  protected final class HandlerMessage
-      implements Comparable<HandlerMessage>, HandlerWrapper.Message {
+  private static final class HandlerMessageData {
 
-    private final long messageId;
-    private final long timeMs;
-    private final ClockHandler handler;
-    @Nullable private final Runnable runnable;
-    private final int what;
-    private final int arg1;
-    private final int arg2;
-    @Nullable private final Object obj;
+    private final long postTime;
+    private final HandlerWrapper handler;
+    private final Runnable runnable;
+    private final int message;
 
-    public HandlerMessage(
-        long timeMs,
-        ClockHandler handler,
-        int what,
-        int arg1,
-        int arg2,
-        @Nullable Object obj,
-        @Nullable Runnable runnable) {
-      this.messageId = getNextMessageId();
-      this.timeMs = timeMs;
+    public HandlerMessageData(long postTime, HandlerWrapper handler, Runnable runnable) {
+      this.postTime = postTime;
       this.handler = handler;
       this.runnable = runnable;
-      this.what = what;
-      this.arg1 = arg1;
-      this.arg2 = arg2;
-      this.obj = obj;
+      this.message = 0;
     }
 
-    /** Returns the time of the message, in milliseconds since boot. */
-    /* package */ long getTimeMs() {
-      return timeMs;
+    public HandlerMessageData(long postTime, HandlerWrapper handler, int message) {
+      this.postTime = postTime;
+      this.handler = handler;
+      this.runnable = null;
+      this.message = message;
     }
 
-    @Override
-    public void sendToTarget() {
-      addPendingHandlerMessage(/* message= */ this);
-    }
-
-    @Override
-    public HandlerWrapper getTarget() {
-      return handler;
-    }
-
-    @Override
-    public int compareTo(HandlerMessage other) {
-      return ComparisonChain.start()
-          .compare(this.timeMs, other.timeMs)
-          .compare(
-              this.messageId,
-              other.messageId,
-              timeMs == Long.MIN_VALUE ? Ordering.natural().reverse() : Ordering.natural())
-          .result();
+    /** Sends the message and returns whether the message was sent to its target. */
+    public boolean maybeSendToTarget(long currentTimeMs) {
+      if (postTime <= currentTimeMs) {
+        if (runnable != null) {
+          handler.post(runnable);
+        } else {
+          handler.sendEmptyMessage(message);
+        }
+        return true;
+      }
+      return false;
     }
   }
 
   /** HandlerWrapper implementation using the enclosing Clock to schedule delayed messages. */
   private final class ClockHandler implements HandlerWrapper {
 
-    public final Handler handler;
-    public final Handler internalHandler;
+    private final android.os.Handler handler;
 
-    public ClockHandler(Looper looper, @Nullable Callback callback) {
-      handler = new Handler(looper, callback);
-      internalHandler = new Handler(looper);
+    public ClockHandler(Looper looper, Callback callback) {
+      handler = new android.os.Handler(looper, callback);
     }
 
     @Override
@@ -346,110 +165,54 @@ public class FakeClock implements Clock {
     }
 
     @Override
-    public boolean hasMessages(int what) {
-      return hasPendingMessage(/* handler= */ this, what);
-    }
-
-    @Override
     public Message obtainMessage(int what) {
-      return obtainMessage(what, /* obj= */ null);
+      return handler.obtainMessage(what);
     }
 
     @Override
-    public Message obtainMessage(int what, @Nullable Object obj) {
-      return obtainMessage(what, /* arg1= */ 0, /* arg2= */ 0, obj);
+    public Message obtainMessage(int what, Object obj) {
+      return handler.obtainMessage(what, obj);
     }
 
     @Override
     public Message obtainMessage(int what, int arg1, int arg2) {
-      return obtainMessage(what, arg1, arg2, /* obj= */ null);
+      return handler.obtainMessage(what, arg1, arg2);
     }
 
     @Override
-    public Message obtainMessage(int what, int arg1, int arg2, @Nullable Object obj) {
-      return new HandlerMessage(
-          uptimeMillis(), /* handler= */ this, what, arg1, arg2, obj, /* runnable= */ null);
-    }
-
-    @Override
-    public boolean sendMessageAtFrontOfQueue(Message msg) {
-      HandlerMessage message = (HandlerMessage) msg;
-      new HandlerMessage(
-              /* timeMs= */ Long.MIN_VALUE,
-              /* handler= */ this,
-              message.what,
-              message.arg1,
-              message.arg2,
-              message.obj,
-              message.runnable)
-          .sendToTarget();
-      return true;
+    public Message obtainMessage(int what, int arg1, int arg2, Object obj) {
+      return handler.obtainMessage(what, arg1, arg2, obj);
     }
 
     @Override
     public boolean sendEmptyMessage(int what) {
-      return sendEmptyMessageAtTime(what, uptimeMillis());
-    }
-
-    @Override
-    public boolean sendEmptyMessageDelayed(int what, int delayMs) {
-      return sendEmptyMessageAtTime(what, uptimeMillis() + delayMs);
+      return handler.sendEmptyMessage(what);
     }
 
     @Override
     public boolean sendEmptyMessageAtTime(int what, long uptimeMs) {
-      new HandlerMessage(
-              uptimeMs,
-              /* handler= */ this,
-              what,
-              /* arg1= */ 0,
-              /* arg2= */ 0,
-              /* obj= */ null,
-              /* runnable= */ null)
-          .sendToTarget();
-      return true;
+      return addHandlerMessageAtTime(this, what, uptimeMs);
     }
 
     @Override
     public void removeMessages(int what) {
-      removePendingHandlerMessages(/* handler= */ this, what);
+      handler.removeMessages(what);
     }
 
     @Override
-    public void removeCallbacksAndMessages(@Nullable Object token) {
-      removePendingHandlerMessages(/* handler= */ this, token);
+    public void removeCallbacksAndMessages(Object token) {
+      handler.removeCallbacksAndMessages(token);
     }
 
     @Override
     public boolean post(Runnable runnable) {
-      return postDelayed(runnable, /* delayMs= */ 0);
+      return handler.post(runnable);
     }
 
     @Override
     public boolean postDelayed(Runnable runnable, long delayMs) {
-      postRunnableAtTime(runnable, uptimeMillis() + delayMs);
-      return true;
-    }
-
-    @Override
-    public boolean postAtFrontOfQueue(Runnable runnable) {
-      postRunnableAtTime(runnable, /* timeMs= */ Long.MIN_VALUE);
-      return true;
-    }
-
-    private void postRunnableAtTime(Runnable runnable, long timeMs) {
-      new HandlerMessage(
-              timeMs,
-              /* handler= */ this,
-              /* what= */ 0,
-              /* arg1= */ 0,
-              /* arg2= */ 0,
-              /* obj= */ null,
-              runnable)
-          .sendToTarget();
+      return addHandlerMessageAtTime(this, runnable, uptimeMillis() + delayMs);
     }
   }
 }
-
-
 

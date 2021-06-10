@@ -32,7 +32,6 @@ import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.testutil.FakeTimeline;
 import com.google.android.exoplayer2.util.MimeTypes;
-import com.google.android.exoplayer2.util.Util;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,11 +47,39 @@ public final class MappingTrackSelectorTest {
   private static final RendererCapabilities METADATA_CAPABILITIES =
       new FakeRendererCapabilities(C.TRACK_TYPE_METADATA);
 
-  private static final TrackGroup VIDEO_TRACK_GROUP = buildTrackGroup(MimeTypes.VIDEO_H264);
-  private static final TrackGroup AUDIO_TRACK_GROUP = buildTrackGroup(MimeTypes.AUDIO_AAC);
-  private static final TrackGroup METADATA_TRACK_GROUP = buildTrackGroup(MimeTypes.APPLICATION_ID3);
+  private static final TrackGroup VIDEO_TRACK_GROUP =
+      new TrackGroup(
+          Format.createVideoSampleFormat(
+              "video",
+              MimeTypes.VIDEO_H264,
+              /* codecs= */ null,
+              /* bitrate= */ Format.NO_VALUE,
+              /* maxInputSize= */ Format.NO_VALUE,
+              /* width= */ 1024,
+              /* height= */ 768,
+              /* frameRate= */ Format.NO_VALUE,
+              /* initializationData= */ null,
+              /* drmInitData= */ null));
+  private static final TrackGroup AUDIO_TRACK_GROUP =
+      new TrackGroup(
+          Format.createAudioSampleFormat(
+              "audio",
+              MimeTypes.AUDIO_AAC,
+              /* codecs= */ null,
+              /* bitrate= */ Format.NO_VALUE,
+              /* maxInputSize= */ Format.NO_VALUE,
+              /* channelCount= */ 2,
+              /* sampleRate= */ 44100,
+              /* initializationData= */ null,
+              /* drmInitData= */ null,
+              /* selectionFlags= */ 0,
+              /* language= */ null));
+  private static final TrackGroup METADATA_TRACK_GROUP =
+      new TrackGroup(
+          Format.createSampleFormat(
+              "metadata", MimeTypes.APPLICATION_ID3, /* subsampleOffsetUs= */ 0));
 
-  private static final Timeline TIMELINE = new FakeTimeline();
+  private static final Timeline TIMELINE = new FakeTimeline(/* windowCount= */ 1);
 
   private static MediaPeriodId periodId;
 
@@ -62,7 +89,7 @@ public final class MappingTrackSelectorTest {
   }
 
   @Test
-  public void selectTracks_audioAndVideo_sameOrderAsRenderers_mappedToCorrectRenderer()
+  public void selectTracks_audioAndVideo_sameOrderAsRenderers_mappedToCorectRenderer()
       throws ExoPlaybackException {
     FakeMappingTrackSelector trackSelector = new FakeMappingTrackSelector();
     RendererCapabilities[] rendererCapabilities =
@@ -76,7 +103,7 @@ public final class MappingTrackSelectorTest {
   }
 
   @Test
-  public void selectTracks_audioAndVideo_reverseOrderToRenderers_mappedToCorrectRenderer()
+  public void selectTracks_audioAndVideo_reverseOrderToRenderers_mappedToCorectRenderer()
       throws ExoPlaybackException {
     FakeMappingTrackSelector trackSelector = new FakeMappingTrackSelector();
     TrackGroupArray trackGroups = new TrackGroupArray(VIDEO_TRACK_GROUP, AUDIO_TRACK_GROUP);
@@ -125,29 +152,24 @@ public final class MappingTrackSelectorTest {
     trackSelector.assertMappedTrackGroups(2, METADATA_TRACK_GROUP);
   }
 
-  private static TrackGroup buildTrackGroup(String sampleMimeType) {
-    return new TrackGroup(new Format.Builder().setSampleMimeType(sampleMimeType).build());
-  }
-
   /**
    * A {@link MappingTrackSelector} that stashes the {@link MappedTrackInfo} passed to {@link
-   * #selectTracks(MappedTrackInfo, int[][][], int[], MediaPeriodId, Timeline)}.
+   * #selectTracks(MappedTrackInfo, int[][][], int[])}.
    */
   private static final class FakeMappingTrackSelector extends MappingTrackSelector {
 
     private MappedTrackInfo lastMappedTrackInfo;
 
     @Override
-    protected Pair<RendererConfiguration[], ExoTrackSelection[]> selectTracks(
+    protected Pair<RendererConfiguration[], TrackSelection[]> selectTracks(
         MappedTrackInfo mappedTrackInfo,
         @Capabilities int[][][] rendererFormatSupports,
-        @AdaptiveSupport int[] rendererMixedMimeTypeAdaptationSupports,
-        MediaPeriodId mediaPeriodId,
-        Timeline timeline) {
+        @AdaptiveSupport int[] rendererMixedMimeTypeAdaptationSupports)
+        throws ExoPlaybackException {
       int rendererCount = mappedTrackInfo.getRendererCount();
       lastMappedTrackInfo = mappedTrackInfo;
       return Pair.create(
-          new RendererConfiguration[rendererCount], new ExoTrackSelection[rendererCount]);
+          new RendererConfiguration[rendererCount], new TrackSelection[rendererCount]);
     }
 
     public void assertMappedTrackGroups(int rendererIndex, TrackGroup... expected) {
@@ -157,6 +179,7 @@ public final class MappingTrackSelectorTest {
         assertThat(rendererTrackGroupArray.get(i)).isEqualTo(expected[i]);
       }
     }
+
   }
 
   /**
@@ -171,11 +194,6 @@ public final class MappingTrackSelectorTest {
     }
 
     @Override
-    public String getName() {
-      return "FakeRenderer(" + Util.getTrackTypeString(trackType) + ")";
-    }
-
-    @Override
     public int getTrackType() {
       return trackType;
     }
@@ -184,9 +202,8 @@ public final class MappingTrackSelectorTest {
     @Capabilities
     public int supportsFormat(Format format) throws ExoPlaybackException {
       return MimeTypes.getTrackType(format.sampleMimeType) == trackType
-          ? RendererCapabilities.create(
-              C.FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED)
-          : RendererCapabilities.create(C.FORMAT_UNSUPPORTED_TYPE);
+          ? RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED)
+          : RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
     }
 
     @Override
@@ -194,5 +211,7 @@ public final class MappingTrackSelectorTest {
     public int supportsMixedMimeTypeAdaptation() throws ExoPlaybackException {
       return ADAPTIVE_SEAMLESS;
     }
+
   }
+
 }

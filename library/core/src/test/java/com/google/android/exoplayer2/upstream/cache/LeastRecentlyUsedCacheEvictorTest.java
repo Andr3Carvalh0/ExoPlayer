@@ -32,7 +32,7 @@ public class LeastRecentlyUsedCacheEvictorTest {
   }
 
   @Test
-  public void contentBiggerThanMaxSizeDoesNotThrowException() throws Exception {
+  public void testContentBiggerThanMaxSizeDoesNotThrowException() throws Exception {
     int maxBytes = 100;
     LeastRecentlyUsedCacheEvictor evictor = new LeastRecentlyUsedCacheEvictor(maxBytes);
     evictor.onCacheInitialized();

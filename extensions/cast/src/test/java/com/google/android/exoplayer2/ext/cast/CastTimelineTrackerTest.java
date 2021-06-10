@@ -15,8 +15,6 @@
  */
 package com.google.android.exoplayer2.ext.cast;
 
-import static org.mockito.Mockito.when;
-
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.testutil.TimelineAsserts;
@@ -41,7 +39,7 @@ public class CastTimelineTrackerTest {
 
   /** Tests that duration of the current media info is correctly propagated to the timeline. */
   @Test
-  public void getCastTimelinePersistsDuration() {
+  public void testGetCastTimelinePersistsDuration() {
     CastTimelineTracker tracker = new CastTimelineTracker();
 
     RemoteMediaClient remoteMediaClient =
@@ -107,18 +105,18 @@ public class CastTimelineTrackerTest {
       int[] itemIds, int currentItemId, long currentDurationMs) {
     RemoteMediaClient remoteMediaClient = Mockito.mock(RemoteMediaClient.class);
     MediaStatus status = Mockito.mock(MediaStatus.class);
-    when(status.getQueueItems()).thenReturn(Collections.emptyList());
-    when(remoteMediaClient.getMediaStatus()).thenReturn(status);
-    when(status.getMediaInfo()).thenReturn(getMediaInfo(currentDurationMs));
-    when(status.getCurrentItemId()).thenReturn(currentItemId);
+    Mockito.when(status.getQueueItems()).thenReturn(Collections.emptyList());
+    Mockito.when(remoteMediaClient.getMediaStatus()).thenReturn(status);
+    Mockito.when(status.getMediaInfo()).thenReturn(getMediaInfo(currentDurationMs));
+    Mockito.when(status.getCurrentItemId()).thenReturn(currentItemId);
     MediaQueue mediaQueue = mockMediaQueue(itemIds);
-    when(remoteMediaClient.getMediaQueue()).thenReturn(mediaQueue);
+    Mockito.when(remoteMediaClient.getMediaQueue()).thenReturn(mediaQueue);
     return remoteMediaClient;
   }
 
   private static MediaQueue mockMediaQueue(int[] itemIds) {
     MediaQueue mediaQueue = Mockito.mock(MediaQueue.class);
-    when(mediaQueue.getItemIds()).thenReturn(itemIds);
+    Mockito.when(mediaQueue.getItemIds()).thenReturn(itemIds);
     return mediaQueue;
   }
 

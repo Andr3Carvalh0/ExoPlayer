@@ -34,35 +34,35 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void containsReturnsFalseWhenEmpty() throws Exception {
+  public void testContainsReturnsFalseWhenEmpty() throws Exception {
     assertThat(contentMetadata.contains("test metadata")).isFalse();
   }
 
   @Test
-  public void containsReturnsTrueForInitialValue() throws Exception {
+  public void testContainsReturnsTrueForInitialValue() throws Exception {
     contentMetadata = createContentMetadata("metadata name", "value");
     assertThat(contentMetadata.contains("metadata name")).isTrue();
   }
 
   @Test
-  public void getReturnsDefaultValueWhenValueIsNotAvailable() throws Exception {
+  public void testGetReturnsDefaultValueWhenValueIsNotAvailable() throws Exception {
     assertThat(contentMetadata.get("metadata name", "default value")).isEqualTo("default value");
   }
 
   @Test
-  public void getReturnsInitialValue() throws Exception {
+  public void testGetReturnsInitialValue() throws Exception {
     contentMetadata = createContentMetadata("metadata name", "value");
     assertThat(contentMetadata.get("metadata name", "default value")).isEqualTo("value");
   }
 
   @Test
-  public void emptyMutationDoesNotFail() throws Exception {
+  public void testEmptyMutationDoesNotFail() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     DefaultContentMetadata.EMPTY.copyWithMutationsApplied(mutations);
   }
 
   @Test
-  public void addNewMetadata() throws Exception {
+  public void testAddNewMetadata() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.set("metadata name", "value");
     contentMetadata = contentMetadata.copyWithMutationsApplied(mutations);
@@ -70,7 +70,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void addNewIntMetadata() throws Exception {
+  public void testAddNewIntMetadata() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.set("metadata name", 5);
     contentMetadata = contentMetadata.copyWithMutationsApplied(mutations);
@@ -78,7 +78,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void addNewByteArrayMetadata() throws Exception {
+  public void testAddNewByteArrayMetadata() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     byte[] value = {1, 2, 3};
     mutations.set("metadata name", value);
@@ -87,14 +87,14 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void newMetadataNotWrittenBeforeCommitted() throws Exception {
+  public void testNewMetadataNotWrittenBeforeCommitted() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.set("metadata name", "value");
     assertThat(contentMetadata.get("metadata name", "default value")).isEqualTo("default value");
   }
 
   @Test
-  public void editMetadata() throws Exception {
+  public void testEditMetadata() throws Exception {
     contentMetadata = createContentMetadata("metadata name", "value");
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.set("metadata name", "edited value");
@@ -103,7 +103,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void removeMetadata() throws Exception {
+  public void testRemoveMetadata() throws Exception {
     contentMetadata = createContentMetadata("metadata name", "value");
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.remove("metadata name");
@@ -112,7 +112,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void addAndRemoveMetadata() throws Exception {
+  public void testAddAndRemoveMetadata() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.set("metadata name", "value");
     mutations.remove("metadata name");
@@ -121,7 +121,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void removeAndAddMetadata() throws Exception {
+  public void testRemoveAndAddMetadata() throws Exception {
     ContentMetadataMutations mutations = new ContentMetadataMutations();
     mutations.remove("metadata name");
     mutations.set("metadata name", "value");
@@ -130,14 +130,14 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void equalsStringValues() throws Exception {
+  public void testEqualsStringValues() throws Exception {
     DefaultContentMetadata metadata1 = createContentMetadata("metadata1", "value");
     DefaultContentMetadata metadata2 = createContentMetadata("metadata1", "value");
     assertThat(metadata1).isEqualTo(metadata2);
   }
 
   @Test
-  public void equals() throws Exception {
+  public void testEquals() throws Exception {
     DefaultContentMetadata metadata1 =
         createContentMetadata(
             "metadata1", "value", "metadata2", 12345, "metadata3", new byte[] {1, 2, 3});
@@ -149,7 +149,7 @@ public class DefaultContentMetadataTest {
   }
 
   @Test
-  public void notEquals() throws Exception {
+  public void testNotEquals() throws Exception {
     DefaultContentMetadata metadata1 = createContentMetadata("metadata1", new byte[] {1, 2, 3});
     DefaultContentMetadata metadata2 = createContentMetadata("metadata1", new byte[] {3, 2, 1});
     assertThat(metadata1).isNotEqualTo(metadata2);

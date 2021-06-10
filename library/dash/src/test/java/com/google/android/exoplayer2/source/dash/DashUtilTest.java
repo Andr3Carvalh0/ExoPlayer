@@ -29,7 +29,6 @@ import com.google.android.exoplayer2.source.dash.manifest.SegmentBase.SingleSegm
 import com.google.android.exoplayer2.upstream.DummyDataSource;
 import com.google.android.exoplayer2.util.MimeTypes;
 import java.util.Arrays;
-import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -38,54 +37,60 @@ import org.junit.runner.RunWith;
 public final class DashUtilTest {
 
   @Test
-  public void loadDrmInitDataFromManifest() throws Exception {
-    Period period = newPeriod(newAdaptationSet(newRepresentation(newDrmInitData())));
-    Format format = DashUtil.loadFormatWithDrmInitData(DummyDataSource.INSTANCE, period);
-    assertThat(format.drmInitData).isEqualTo(newDrmInitData());
+  public void testLoadDrmInitDataFromManifest() throws Exception {
+    Period period = newPeriod(newAdaptationSets(newRepresentations(newDrmInitData())));
+    DrmInitData drmInitData = DashUtil.loadDrmInitData(DummyDataSource.INSTANCE, period);
+    assertThat(drmInitData).isEqualTo(newDrmInitData());
   }
 
   @Test
-  public void loadDrmInitDataMissing() throws Exception {
-    Period period = newPeriod(newAdaptationSet(newRepresentation(null /* no init data */)));
-    Format format = DashUtil.loadFormatWithDrmInitData(DummyDataSource.INSTANCE, period);
-    assertThat(format.drmInitData).isNull();
+  public void testLoadDrmInitDataMissing() throws Exception {
+    Period period = newPeriod(newAdaptationSets(newRepresentations(null /* no init data */)));
+    DrmInitData drmInitData = DashUtil.loadDrmInitData(DummyDataSource.INSTANCE, period);
+    assertThat(drmInitData).isNull();
   }
 
   @Test
-  public void loadDrmInitDataNoRepresentations() throws Exception {
-    Period period = newPeriod(newAdaptationSet(/* no representation */ ));
-    Format format = DashUtil.loadFormatWithDrmInitData(DummyDataSource.INSTANCE, period);
-    assertThat(format).isNull();
+  public void testLoadDrmInitDataNoRepresentations() throws Exception {
+    Period period = newPeriod(newAdaptationSets(/* no representation */ ));
+    DrmInitData drmInitData = DashUtil.loadDrmInitData(DummyDataSource.INSTANCE, period);
+    assertThat(drmInitData).isNull();
   }
 
   @Test
-  public void loadDrmInitDataNoAdaptationSets() throws Exception {
+  public void testLoadDrmInitDataNoAdaptationSets() throws Exception {
     Period period = newPeriod(/* no adaptation set */ );
-    Format format = DashUtil.loadFormatWithDrmInitData(DummyDataSource.INSTANCE, period);
-    assertThat(format).isNull();
+    DrmInitData drmInitData = DashUtil.loadDrmInitData(DummyDataSource.INSTANCE, period);
+    assertThat(drmInitData).isNull();
   }
 
   private static Period newPeriod(AdaptationSet... adaptationSets) {
     return new Period("", 0, Arrays.asList(adaptationSets));
   }
 
-  private static AdaptationSet newAdaptationSet(Representation... representations) {
-    return new AdaptationSet(
-        /* id= */ 0,
-        C.TRACK_TYPE_VIDEO,
-        Arrays.asList(representations),
-        /* accessibilityDescriptors= */ Collections.emptyList(),
-        /* essentialProperties= */ Collections.emptyList(),
-        /* supplementalProperties= */ Collections.emptyList());
+  private static AdaptationSet newAdaptationSets(Representation... representations) {
+    return new AdaptationSet(0, C.TRACK_TYPE_VIDEO, Arrays.asList(representations), null, null);
   }
 
-  private static Representation newRepresentation(DrmInitData drmInitData) {
+  private static Representation newRepresentations(DrmInitData drmInitData) {
     Format format =
-        new Format.Builder()
-            .setContainerMimeType(MimeTypes.VIDEO_MP4)
-            .setSampleMimeType(MimeTypes.VIDEO_H264)
-            .setDrmInitData(drmInitData)
-            .build();
+        Format.createVideoContainerFormat(
+            "id",
+            "label",
+            MimeTypes.VIDEO_MP4,
+            MimeTypes.VIDEO_H264,
+            /* codecs= */ "",
+            /* metadata= */ null,
+            Format.NO_VALUE,
+            /* width= */ 1024,
+            /* height= */ 768,
+            Format.NO_VALUE,
+            /* initializationData= */ null,
+            /* selectionFlags= */ 0,
+            /* roleFlags= */ 0);
+    if (drmInitData != null) {
+      format = format.copyWithDrmInitData(drmInitData);
+    }
     return Representation.newInstance(0, format, "", new SingleSegmentBase());
   }
 

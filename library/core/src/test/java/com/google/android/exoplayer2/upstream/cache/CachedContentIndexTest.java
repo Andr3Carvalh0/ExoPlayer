@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.upstream.cache;
 
-import static com.google.android.exoplayer2.testutil.TestUtil.createTestFile;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
@@ -89,7 +88,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void addGetRemove() throws Exception {
+  public void testAddGetRemove() throws Exception {
     final String key1 = "key1";
     final String key2 = "key2";
     final String key3 = "key3";
@@ -104,9 +103,12 @@ public class CachedContentIndexTest {
     // add a span
     int cacheFileLength = 20;
     File cacheSpanFile =
-        SimpleCacheSpan.getCacheFile(
-            cacheDir, cachedContent1.id, /* position= */ 10, /* timestamp= */ 30);
-    createTestFile(cacheSpanFile, cacheFileLength);
+        SimpleCacheSpanTest.createCacheSpanFile(
+            cacheDir,
+            cachedContent1.id,
+            /* offset= */ 10,
+            cacheFileLength,
+            /* lastTouchTimestamp= */ 30);
     SimpleCacheSpan span = SimpleCacheSpan.createCacheEntry(cacheSpanFile, cacheFileLength, index);
     assertThat(span).isNotNull();
     cachedContent1.addSpan(span);
@@ -144,12 +146,12 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void legacyStoreAndLoad() throws Exception {
+  public void testLegacyStoreAndLoad() throws Exception {
     assertStoredAndLoadedEqual(newLegacyInstance(), newLegacyInstance());
   }
 
   @Test
-  public void legacyLoadV1() throws Exception {
+  public void testLegacyLoadV1() throws Exception {
     CachedContentIndex index = newLegacyInstance();
 
     FileOutputStream fos =
@@ -170,7 +172,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void legacyLoadV2() throws Exception {
+  public void testLegacyLoadV2() throws Exception {
     CachedContentIndex index = newLegacyInstance();
 
     FileOutputStream fos =
@@ -192,7 +194,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void assignIdForKeyAndGetKeyForId() {
+  public void testAssignIdForKeyAndGetKeyForId() {
     CachedContentIndex index = newInstance();
     final String key1 = "key1";
     final String key2 = "key2";
@@ -206,7 +208,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void getNewId() {
+  public void testGetNewId() {
     SparseArray<String> idToKey = new SparseArray<>();
     assertThat(CachedContentIndex.getNewId(idToKey)).isEqualTo(0);
     idToKey.put(10, "");
@@ -218,7 +220,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void legacyEncryption() throws Exception {
+  public void testLegacyEncryption() throws Exception {
     byte[] key = Util.getUtf8Bytes("Bar12345Bar12345"); // 128 bit key
     byte[] key2 = Util.getUtf8Bytes("Foo12345Foo12345"); // 128 bit key
 
@@ -270,7 +272,7 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void removeEmptyNotLockedCachedContent() {
+  public void testRemoveEmptyNotLockedCachedContent() {
     CachedContentIndex index = newInstance();
     CachedContent cachedContent = index.getOrAdd("key1");
 
@@ -280,15 +282,18 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void cantRemoveNotEmptyCachedContent() throws Exception {
+  public void testCantRemoveNotEmptyCachedContent() throws Exception {
     CachedContentIndex index = newInstance();
 
     CachedContent cachedContent = index.getOrAdd("key1");
     long cacheFileLength = 20;
     File cacheFile =
-        SimpleCacheSpan.getCacheFile(
-            cacheDir, cachedContent.id, /* position= */ 10, /* timestamp= */ 30);
-    createTestFile(cacheFile, cacheFileLength);
+        SimpleCacheSpanTest.createCacheSpanFile(
+            cacheDir,
+            cachedContent.id,
+            /* offset= */ 10,
+            cacheFileLength,
+            /* lastTouchTimestamp= */ 30);
     SimpleCacheSpan span = SimpleCacheSpan.createCacheEntry(cacheFile, cacheFileLength, index);
     cachedContent.addSpan(span);
 
@@ -298,10 +303,10 @@ public class CachedContentIndexTest {
   }
 
   @Test
-  public void cantRemoveLockedCachedContent() {
+  public void testCantRemoveLockedCachedContent() {
     CachedContentIndex index = newInstance();
     CachedContent cachedContent = index.getOrAdd("key1");
-    cachedContent.lockRange(0, 1);
+    cachedContent.setLocked(true);
 
     index.maybeRemove(cachedContent.key);
 

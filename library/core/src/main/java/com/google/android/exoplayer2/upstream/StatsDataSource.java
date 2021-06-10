@@ -72,7 +72,6 @@ public final class StatsDataSource implements DataSource {
 
   @Override
   public void addTransferListener(TransferListener transferListener) {
-    Assertions.checkNotNull(transferListener);
     dataSource.addTransferListener(transferListener);
   }
 

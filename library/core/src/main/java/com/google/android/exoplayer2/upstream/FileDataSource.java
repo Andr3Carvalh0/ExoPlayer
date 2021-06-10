@@ -16,13 +16,13 @@
 package com.google.android.exoplayer2.upstream;
 
 import static com.google.android.exoplayer2.util.Util.castNonNull;
-import static java.lang.Math.min;
 
 import android.net.Uri;
 import android.text.TextUtils;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Assertions;
+import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -86,11 +86,12 @@ public final class FileDataSource extends BaseDataSource {
       transferInitializing(dataSpec);
 
       this.file = openLocalFile(uri);
+
       file.seek(dataSpec.position);
       bytesRemaining = dataSpec.length == C.LENGTH_UNSET ? file.length() - dataSpec.position
           : dataSpec.length;
       if (bytesRemaining < 0) {
-        throw new DataSourceException(DataSourceException.POSITION_OUT_OF_RANGE);
+        throw new EOFException();
       }
     } catch (IOException e) {
       throw new FileDataSourceException(e);
@@ -102,6 +103,23 @@ public final class FileDataSource extends BaseDataSource {
     return bytesRemaining;
   }
 
+  private static RandomAccessFile openLocalFile(Uri uri) throws FileDataSourceException {
+    try {
+      return new RandomAccessFile(Assertions.checkNotNull(uri.getPath()), "r");
+    } catch (FileNotFoundException e) {
+      if (!TextUtils.isEmpty(uri.getQuery()) || !TextUtils.isEmpty(uri.getFragment())) {
+        throw new FileDataSourceException(
+            String.format(
+                "uri has query and/or fragment, which are not supported. Did you call Uri.parse()"
+                    + " on a string containing '?' or '#'? Use Uri.fromFile(new File(path)) to"
+                    + " avoid this. path=%s,query=%s,fragment=%s",
+                uri.getPath(), uri.getQuery(), uri.getFragment()),
+            e);
+      }
+      throw new FileDataSourceException(e);
+    }
+  }
+
   @Override
   public int read(byte[] buffer, int offset, int readLength) throws FileDataSourceException {
     if (readLength == 0) {
@@ -111,7 +129,8 @@ public final class FileDataSource extends BaseDataSource {
     } else {
       int bytesRead;
       try {
-        bytesRead = castNonNull(file).read(buffer, offset, (int) min(bytesRemaining, readLength));
+        bytesRead =
+            castNonNull(file).read(buffer, offset, (int) Math.min(bytesRemaining, readLength));
       } catch (IOException e) {
         throw new FileDataSourceException(e);
       }
@@ -149,20 +168,4 @@ public final class FileDataSource extends BaseDataSource {
     }
   }
 
-  private static RandomAccessFile openLocalFile(Uri uri) throws FileDataSourceException {
-    try {
-      return new RandomAccessFile(Assertions.checkNotNull(uri.getPath()), "r");
-    } catch (FileNotFoundException e) {
-      if (!TextUtils.isEmpty(uri.getQuery()) || !TextUtils.isEmpty(uri.getFragment())) {
-        throw new FileDataSourceException(
-            String.format(
-                "uri has query and/or fragment, which are not supported. Did you call Uri.parse()"
-                    + " on a string containing '?' or '#'? Use Uri.fromFile(new File(path)) to"
-                    + " avoid this. path=%s,query=%s,fragment=%s",
-                uri.getPath(), uri.getQuery(), uri.getFragment()),
-            e);
-      }
-      throw new FileDataSourceException(e);
-    }
-  }
 }

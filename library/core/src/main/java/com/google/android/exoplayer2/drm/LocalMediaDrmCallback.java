@@ -18,6 +18,7 @@ package com.google.android.exoplayer2.drm;
 import com.google.android.exoplayer2.drm.ExoMediaDrm.KeyRequest;
 import com.google.android.exoplayer2.drm.ExoMediaDrm.ProvisionRequest;
 import com.google.android.exoplayer2.util.Assertions;
+import java.io.IOException;
 import java.util.UUID;
 
 /**
@@ -38,12 +39,12 @@ public final class LocalMediaDrmCallback implements MediaDrmCallback {
   }
 
   @Override
-  public byte[] executeProvisionRequest(UUID uuid, ProvisionRequest request) {
+  public byte[] executeProvisionRequest(UUID uuid, ProvisionRequest request) throws IOException {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public byte[] executeKeyRequest(UUID uuid, KeyRequest request) {
+  public byte[] executeKeyRequest(UUID uuid, KeyRequest request) throws Exception {
     return keyResponse;
   }
 

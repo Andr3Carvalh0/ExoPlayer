@@ -16,19 +16,18 @@
 package com.google.android.exoplayer2.text.webvtt;
 
 import android.graphics.Typeface;
+import android.text.Layout;
 import android.text.TextUtils;
-import androidx.annotation.ColorInt;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import com.google.android.exoplayer2.text.span.TextAnnotation;
-import com.google.common.base.Ascii;
+import com.google.android.exoplayer2.util.Util;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 
 /**
  * Style object of a Css style block in a Webvtt file.
@@ -80,12 +79,12 @@ public final class WebvttCssStyle {
   // Selector properties.
   private String targetId;
   private String targetTag;
-  private Set<String> targetClasses;
+  private List<String> targetClasses;
   private String targetVoice;
 
   // Style properties.
   @Nullable private String fontFamily;
-  @ColorInt private int fontColor;
+  private int fontColor;
   private boolean hasFontColor;
   private int backgroundColor;
   private boolean hasBackgroundColor;
@@ -95,13 +94,20 @@ public final class WebvttCssStyle {
   @OptionalBoolean private int italic;
   @FontSizeUnit private int fontSizeUnit;
   private float fontSize;
-  @TextAnnotation.Position private int rubyPosition;
-  private boolean combineUpright;
+  @Nullable private Layout.Alignment textAlign;
 
+  // Calling reset() is forbidden because `this` isn't initialized. This can be safely suppressed
+  // because reset() only assigns fields, it doesn't read any.
+  @SuppressWarnings("nullness:method.invocation.invalid")
   public WebvttCssStyle() {
+    reset();
+  }
+
+  @EnsuresNonNull({"targetId", "targetTag", "targetClasses", "targetVoice"})
+  public void reset() {
     targetId = "";
     targetTag = "";
-    targetClasses = Collections.emptySet();
+    targetClasses = Collections.emptyList();
     targetVoice = "";
     fontFamily = null;
     hasFontColor = false;
@@ -111,8 +117,7 @@ public final class WebvttCssStyle {
     bold = UNSPECIFIED;
     italic = UNSPECIFIED;
     fontSizeUnit = UNSPECIFIED;
-    rubyPosition = TextAnnotation.POSITION_UNKNOWN;
-    combineUpright = false;
+    textAlign = null;
   }
 
   public void setTargetId(String targetId) {
@@ -124,7 +129,7 @@ public final class WebvttCssStyle {
   }
 
   public void setTargetClasses(String[] targetClasses) {
-    this.targetClasses = new HashSet<>(Arrays.asList(targetClasses));
+    this.targetClasses = Arrays.asList(targetClasses);
   }
 
   public void setTargetVoice(String targetVoice) {
@@ -150,7 +155,7 @@ public final class WebvttCssStyle {
    * @return The score of the match, zero if there is no match.
    */
   public int getSpecificityScore(
-      @Nullable String id, @Nullable String tag, Set<String> classes, @Nullable String voice) {
+      @Nullable String id, @Nullable String tag, String[] classes, @Nullable String voice) {
     if (targetId.isEmpty() && targetTag.isEmpty() && targetClasses.isEmpty()
         && targetVoice.isEmpty()) {
       // The selector is universal. It matches with the minimum score if and only if the given
@@ -161,7 +166,7 @@ public final class WebvttCssStyle {
     score = updateScoreForMatch(score, targetId, id, 0x40000000);
     score = updateScoreForMatch(score, targetTag, tag, 2);
     score = updateScoreForMatch(score, targetVoice, voice, 4);
-    if (score == -1 || !classes.containsAll(targetClasses)) {
+    if (score == -1 || !Arrays.asList(classes).containsAll(targetClasses)) {
       return 0;
     } else {
       score += targetClasses.size() * 4;
@@ -216,7 +221,7 @@ public final class WebvttCssStyle {
   }
 
   public WebvttCssStyle setFontFamily(@Nullable String fontFamily) {
-    this.fontFamily = fontFamily == null ? null : Ascii.toLowerCase(fontFamily);
+    this.fontFamily = Util.toLowerInvariant(fontFamily);
     return this;
   }
 
@@ -254,6 +259,16 @@ public final class WebvttCssStyle {
     return hasBackgroundColor;
   }
 
+  @Nullable
+  public Layout.Alignment getTextAlign() {
+    return textAlign;
+  }
+
+  public WebvttCssStyle setTextAlign(@Nullable Layout.Alignment textAlign) {
+    this.textAlign = textAlign;
+    return this;
+  }
+
   public WebvttCssStyle setFontSize(float fontSize) {
     this.fontSize = fontSize;
     return this;
@@ -272,23 +287,35 @@ public final class WebvttCssStyle {
     return fontSize;
   }
 
-  public WebvttCssStyle setRubyPosition(@TextAnnotation.Position int rubyPosition) {
-    this.rubyPosition = rubyPosition;
-    return this;
-  }
-
-  @TextAnnotation.Position
-  public int getRubyPosition() {
-    return rubyPosition;
-  }
-
-  public WebvttCssStyle setCombineUpright(boolean enabled) {
-    this.combineUpright = enabled;
-    return this;
-  }
-
-  public boolean getCombineUpright() {
-    return combineUpright;
+  public void cascadeFrom(WebvttCssStyle style) {
+    if (style.hasFontColor) {
+      setFontColor(style.fontColor);
+    }
+    if (style.bold != UNSPECIFIED) {
+      bold = style.bold;
+    }
+    if (style.italic != UNSPECIFIED) {
+      italic = style.italic;
+    }
+    if (style.fontFamily != null) {
+      fontFamily = style.fontFamily;
+    }
+    if (linethrough == UNSPECIFIED) {
+      linethrough = style.linethrough;
+    }
+    if (underline == UNSPECIFIED) {
+      underline = style.underline;
+    }
+    if (textAlign == null) {
+      textAlign = style.textAlign;
+    }
+    if (fontSizeUnit == UNSPECIFIED) {
+      fontSizeUnit = style.fontSizeUnit;
+      fontSize = style.fontSize;
+    }
+    if (style.hasBackgroundColor) {
+      setBackgroundColor(style.backgroundColor);
+    }
   }
 
   private static int updateScoreForMatch(

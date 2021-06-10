@@ -32,3 +32,4 @@ void main() {
   gl_FragColor = videoColor * (1.0 - overlayColor.a)
       + overlayColor * overlayColor.a;
 }
+

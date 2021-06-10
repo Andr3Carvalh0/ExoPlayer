@@ -29,7 +29,7 @@ import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.source.chunk.MediaChunk;
 import com.google.android.exoplayer2.source.chunk.MediaChunkIterator;
 import com.google.android.exoplayer2.trackselection.BaseTrackSelection;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.util.ConditionVariable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,17 +53,6 @@ public final class MediaPeriodAsserts {
   }
 
   private MediaPeriodAsserts() {}
-
-  /**
-   * Prepares the {@link MediaPeriod} and asserts that it provides the specified track groups.
-   *
-   * @param mediaPeriod The {@link MediaPeriod} to test.
-   * @param expectedGroups The expected track groups.
-   */
-  public static void assertTrackGroups(MediaPeriod mediaPeriod, TrackGroupArray expectedGroups) {
-    TrackGroupArray actualGroups = prepareAndGetTrackGroups(mediaPeriod);
-    assertThat(actualGroups).isEqualTo(expectedGroups);
-  }
 
   /**
    * Asserts that the values returns by {@link MediaPeriod#getStreamKeys(List)} are compatible with
@@ -96,13 +85,13 @@ public final class MediaPeriodAsserts {
           int periodIndex,
           @Nullable String ignoredMimeType) {
     MediaPeriod mediaPeriod = mediaPeriodFactory.createMediaPeriod(manifest, periodIndex);
-    TrackGroupArray trackGroupArray = prepareAndGetTrackGroups(mediaPeriod);
+    TrackGroupArray trackGroupArray = getTrackGroups(mediaPeriod);
 
     // Create test vector of query test selections:
     //  - One selection with one track per group, two tracks or all tracks.
     //  - Two selections with tracks from multiple groups, or tracks from a single group.
     //  - Multiple selections with tracks from all groups.
-    List<List<ExoTrackSelection>> testSelections = new ArrayList<>();
+    List<List<TrackSelection>> testSelections = new ArrayList<>();
     for (int i = 0; i < trackGroupArray.length; i++) {
       TrackGroup trackGroup = trackGroupArray.get(i);
       for (int j = 0; j < trackGroup.length; j++) {
@@ -112,7 +101,7 @@ public final class MediaPeriodAsserts {
         testSelections.add(Collections.singletonList(new TestTrackSelection(trackGroup, 0, 1)));
         testSelections.add(
             Arrays.asList(
-                new ExoTrackSelection[] {
+                new TrackSelection[] {
                   new TestTrackSelection(trackGroup, 0), new TestTrackSelection(trackGroup, 1)
                 }));
       }
@@ -130,7 +119,7 @@ public final class MediaPeriodAsserts {
         for (int j = i + 1; j < trackGroupArray.length; j++) {
           testSelections.add(
               Arrays.asList(
-                  new ExoTrackSelection[] {
+                  new TrackSelection[] {
                     new TestTrackSelection(trackGroupArray.get(i), 0),
                     new TestTrackSelection(trackGroupArray.get(j), 0)
                   }));
@@ -138,7 +127,7 @@ public final class MediaPeriodAsserts {
       }
     }
     if (trackGroupArray.length > 2) {
-      List<ExoTrackSelection> selectionsFromAllGroups = new ArrayList<>();
+      List<TrackSelection> selectionsFromAllGroups = new ArrayList<>();
       for (int i = 0; i < trackGroupArray.length; i++) {
         selectionsFromAllGroups.add(new TestTrackSelection(trackGroupArray.get(i), 0));
       }
@@ -147,7 +136,7 @@ public final class MediaPeriodAsserts {
 
     // Verify for each case that stream keys can be used to create filtered tracks which still
     // contain at least all requested formats.
-    for (List<ExoTrackSelection> testSelection : testSelections) {
+    for (List<TrackSelection> testSelection : testSelections) {
       List<StreamKey> streamKeys = mediaPeriod.getStreamKeys(testSelection);
       if (streamKeys.isEmpty()) {
         // Manifests won't be filtered if stream key is empty.
@@ -157,8 +146,8 @@ public final class MediaPeriodAsserts {
       // The filtered manifest should only have one period left.
       MediaPeriod filteredMediaPeriod =
           mediaPeriodFactory.createMediaPeriod(filteredManifest, /* periodIndex= */ 0);
-      TrackGroupArray filteredTrackGroupArray = prepareAndGetTrackGroups(filteredMediaPeriod);
-      for (ExoTrackSelection trackSelection : testSelection) {
+      TrackGroupArray filteredTrackGroupArray = getTrackGroups(filteredMediaPeriod);
+      for (TrackSelection trackSelection : testSelection) {
         if (ignoredMimeType != null
             && ignoredMimeType.equals(trackSelection.getFormat(0).sampleMimeType)) {
           continue;
@@ -197,11 +186,11 @@ public final class MediaPeriodAsserts {
     return true;
   }
 
-  private static TrackGroupArray prepareAndGetTrackGroups(MediaPeriod mediaPeriod) {
-    AtomicReference<TrackGroupArray> trackGroupArray = new AtomicReference<>();
-    DummyMainThread testThread = new DummyMainThread();
+  private static TrackGroupArray getTrackGroups(MediaPeriod mediaPeriod) {
+    AtomicReference<TrackGroupArray> trackGroupArray = new AtomicReference<>(null);
+    DummyMainThread dummyMainThread = new DummyMainThread();
     ConditionVariable preparedCondition = new ConditionVariable();
-    testThread.runOnMainThread(
+    dummyMainThread.runOnMainThread(
         () ->
             mediaPeriod.prepare(
                 new Callback() {
@@ -222,7 +211,7 @@ public final class MediaPeriodAsserts {
     } catch (InterruptedException e) {
       // Ignore.
     }
-    testThread.release();
+    dummyMainThread.release();
     return trackGroupArray.get();
   }
 
@@ -242,8 +231,8 @@ public final class MediaPeriodAsserts {
       return C.SELECTION_REASON_UNKNOWN;
     }
 
-    @Override
     @Nullable
+    @Override
     public Object getSelectionData() {
       return null;
     }

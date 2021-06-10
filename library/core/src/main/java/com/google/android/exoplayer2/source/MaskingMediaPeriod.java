@@ -15,33 +15,27 @@
  */
 package com.google.android.exoplayer2.source;
 
-import static com.google.android.exoplayer2.util.Assertions.checkNotNull;
-import static com.google.android.exoplayer2.util.Assertions.checkState;
 import static com.google.android.exoplayer2.util.Util.castNonNull;
 
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.source.MediaSource.MediaPeriodId;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.upstream.Allocator;
 import java.io.IOException;
 import org.checkerframework.checker.nullness.compatqual.NullableType;
-import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
 /**
- * Media period that defers calling {@link MediaSource#createPeriod(MediaPeriodId, Allocator, long)}
- * on a given source until {@link #createPeriod(MediaPeriodId)} has been called. This is useful if
- * you need to return a media period immediately but the media source that should create it is not
- * yet available or prepared.
+ * Media period that wraps a media source and defers calling its {@link
+ * MediaSource#createPeriod(MediaPeriodId, Allocator, long)} method until {@link
+ * #createPeriod(MediaPeriodId)} has been called. This is useful if you need to return a media
+ * period immediately but the media source that should create it is not yet prepared.
  */
 public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callback {
 
-  /** Listener for preparation events. */
-  public interface PrepareListener {
-
-    /** Called when preparing the media period completes. */
-    void onPrepareComplete(MediaPeriodId mediaPeriodId);
+  /** Listener for preparation errors. */
+  public interface PrepareErrorListener {
 
     /**
      * Called the first time an error occurs while refreshing source info or preparing the period.
@@ -49,44 +43,45 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
     void onPrepareError(MediaPeriodId mediaPeriodId, IOException exception);
   }
 
+  /** The {@link MediaSource} which will create the actual media period. */
+  public final MediaSource mediaSource;
   /** The {@link MediaPeriodId} used to create the masking media period. */
   public final MediaPeriodId id;
 
-  private final long preparePositionUs;
   private final Allocator allocator;
 
-  /** The {@link MediaSource} that will create the underlying media period. */
-  private @MonotonicNonNull MediaSource mediaSource;
-
-  private @MonotonicNonNull MediaPeriod mediaPeriod;
+  @Nullable private MediaPeriod mediaPeriod;
   @Nullable private Callback callback;
-  @Nullable private PrepareListener listener;
+  private long preparePositionUs;
+  @Nullable private PrepareErrorListener listener;
   private boolean notifiedPrepareError;
   private long preparePositionOverrideUs;
 
   /**
-   * Creates a new masking media period. The media source must be set via {@link
-   * #setMediaSource(MediaSource)} before preparation can start.
+   * Creates a new masking media period.
    *
+   * @param mediaSource The media source to wrap.
    * @param id The identifier used to create the masking media period.
    * @param allocator The allocator used to create the media period.
    * @param preparePositionUs The expected start position, in microseconds.
    */
-  public MaskingMediaPeriod(MediaPeriodId id, Allocator allocator, long preparePositionUs) {
+  public MaskingMediaPeriod(
+      MediaSource mediaSource, MediaPeriodId id, Allocator allocator, long preparePositionUs) {
     this.id = id;
     this.allocator = allocator;
+    this.mediaSource = mediaSource;
     this.preparePositionUs = preparePositionUs;
     preparePositionOverrideUs = C.TIME_UNSET;
   }
 
   /**
-   * Sets a listener for preparation events.
+   * Sets a listener for preparation errors.
    *
-   * @param listener An listener to be notified of media period preparation events. If a listener is
+   * @param listener An listener to be notified of media period preparation errors. If a listener is
    *     set, {@link #maybeThrowPrepareError()} will not throw but will instead pass the first
    *     preparation error (if any) to the listener.
    */
-  public void setPrepareListener(PrepareListener listener) {
+  public void setPrepareErrorListener(PrepareErrorListener listener) {
     this.listener = listener;
   }
 
@@ -96,24 +91,13 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
   }
 
   /**
-   * Overrides the default prepare position at which to prepare the media period. This method must
-   * be called before {@link #createPeriod(MediaPeriodId)}.
+   * Overrides the default prepare position at which to prepare the media period. This value is only
+   * used if called before {@link #createPeriod(MediaPeriodId)}.
    *
    * @param preparePositionUs The default prepare position to use, in microseconds.
    */
   public void overridePreparePositionUs(long preparePositionUs) {
     preparePositionOverrideUs = preparePositionUs;
-  }
-
-  /** Returns the prepare position override set by {@link #overridePreparePositionUs(long)}. */
-  public long getPreparePositionOverrideUs() {
-    return preparePositionOverrideUs;
-  }
-
-  /** Sets the {@link MediaSource} that will create the underlying media period. */
-  public void setMediaSource(MediaSource mediaSource) {
-    checkState(this.mediaSource == null);
-    this.mediaSource = mediaSource;
   }
 
   /**
@@ -125,16 +109,18 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
    */
   public void createPeriod(MediaPeriodId id) {
     long preparePositionUs = getPreparePositionWithOverride(this.preparePositionUs);
-    mediaPeriod = checkNotNull(mediaSource).createPeriod(id, allocator, preparePositionUs);
+    mediaPeriod = mediaSource.createPeriod(id, allocator, preparePositionUs);
     if (callback != null) {
-      mediaPeriod.prepare(/* callback= */ this, preparePositionUs);
+      mediaPeriod.prepare(this, preparePositionUs);
     }
   }
 
-  /** Releases the period. */
+  /**
+   * Releases the period.
+   */
   public void releasePeriod() {
     if (mediaPeriod != null) {
-      checkNotNull(mediaSource).releasePeriod(mediaPeriod);
+      mediaSource.releasePeriod(mediaPeriod);
     }
   }
 
@@ -142,8 +128,7 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
   public void prepare(Callback callback, long preparePositionUs) {
     this.callback = callback;
     if (mediaPeriod != null) {
-      mediaPeriod.prepare(
-          /* callback= */ this, getPreparePositionWithOverride(this.preparePositionUs));
+      mediaPeriod.prepare(this, getPreparePositionWithOverride(this.preparePositionUs));
     }
   }
 
@@ -152,10 +137,10 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
     try {
       if (mediaPeriod != null) {
         mediaPeriod.maybeThrowPrepareError();
-      } else if (mediaSource != null) {
+      } else {
         mediaSource.maybeThrowSourceInfoRefreshError();
       }
-    } catch (IOException e) {
+    } catch (final IOException e) {
       if (listener == null) {
         throw e;
       }
@@ -173,7 +158,7 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
 
   @Override
   public long selectTracks(
-      @NullableType ExoTrackSelection[] selections,
+      @NullableType TrackSelection[] selections,
       boolean[] mayRetainStreamFlags,
       @NullableType SampleStream[] streams,
       boolean[] streamResetFlags,
@@ -241,9 +226,6 @@ public final class MaskingMediaPeriod implements MediaPeriod, MediaPeriod.Callba
   @Override
   public void onPrepared(MediaPeriod mediaPeriod) {
     castNonNull(callback).onPrepared(this);
-    if (listener != null) {
-      listener.onPrepareComplete(id);
-    }
   }
 
   private long getPreparePositionWithOverride(long preparePositionUs) {

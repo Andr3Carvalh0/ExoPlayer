@@ -37,7 +37,7 @@ import org.junit.runner.RunWith;
 public class SsManifestTest {
 
   @Test
-  public void copy() throws Exception {
+  public void testCopy() throws Exception {
     Format[][] formats = newFormats(2, 3);
     SsManifest sourceManifest =
         createSsManifest(
@@ -58,7 +58,7 @@ public class SsManifestTest {
   }
 
   @Test
-  public void copyRemoveStreamElement() throws Exception {
+  public void testCopyRemoveStreamElement() throws Exception {
     Format[][] formats = newFormats(2, 3);
     SsManifest sourceManifest =
         createSsManifest(
@@ -114,10 +114,15 @@ public class SsManifestTest {
   }
 
   private static Format newFormat(String id) {
-    return new Format.Builder()
-        .setId(id)
-        .setContainerMimeType(MimeTypes.VIDEO_MP4)
-        .setSampleMimeType(MimeTypes.VIDEO_H264)
-        .build();
+    return Format.createContainerFormat(
+        id,
+        /* label= */ null,
+        MimeTypes.VIDEO_MP4,
+        MimeTypes.VIDEO_H264,
+        /* codecs= */ null,
+        /* bitrate= */ Format.NO_VALUE,
+        /* selectionFlags= */ 0,
+        /* roleFlags= */ 0,
+        /* language= */ null);
   }
 }

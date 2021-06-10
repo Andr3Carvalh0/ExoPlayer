@@ -16,7 +16,6 @@
 package com.google.android.exoplayer2.audio;
 
 import androidx.annotation.Nullable;
-import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlaybackParameters;
 import java.nio.ByteBuffer;
 
@@ -35,14 +34,8 @@ public class ForwardingAudioSink implements AudioSink {
   }
 
   @Override
-  public boolean supportsFormat(Format format) {
-    return sink.supportsFormat(format);
-  }
-
-  @Override
-  @SinkFormatSupport
-  public int getFormatSupport(Format format) {
-    return sink.getFormatSupport(format);
+  public boolean supportsOutput(int channelCount, int encoding) {
+    return sink.supportsOutput(channelCount, encoding);
   }
 
   @Override
@@ -51,9 +44,23 @@ public class ForwardingAudioSink implements AudioSink {
   }
 
   @Override
-  public void configure(Format inputFormat, int specifiedBufferSize, @Nullable int[] outputChannels)
+  public void configure(
+      int inputEncoding,
+      int inputChannelCount,
+      int inputSampleRate,
+      int specifiedBufferSize,
+      @Nullable int[] outputChannels,
+      int trimStartFrames,
+      int trimEndFrames)
       throws ConfigurationException {
-    sink.configure(inputFormat, specifiedBufferSize, outputChannels);
+    sink.configure(
+        inputEncoding,
+        inputChannelCount,
+        inputSampleRate,
+        specifiedBufferSize,
+        outputChannels,
+        trimStartFrames,
+        trimEndFrames);
   }
 
   @Override
@@ -67,10 +74,9 @@ public class ForwardingAudioSink implements AudioSink {
   }
 
   @Override
-  public boolean handleBuffer(
-      ByteBuffer buffer, long presentationTimeUs, int encodedAccessUnitCount)
+  public boolean handleBuffer(ByteBuffer buffer, long presentationTimeUs)
       throws InitializationException, WriteException {
-    return sink.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount);
+    return sink.handleBuffer(buffer, presentationTimeUs);
   }
 
   @Override
@@ -99,16 +105,6 @@ public class ForwardingAudioSink implements AudioSink {
   }
 
   @Override
-  public void setSkipSilenceEnabled(boolean skipSilenceEnabled) {
-    sink.setSkipSilenceEnabled(skipSilenceEnabled);
-  }
-
-  @Override
-  public boolean getSkipSilenceEnabled() {
-    return sink.getSkipSilenceEnabled();
-  }
-
-  @Override
   public void setAudioAttributes(AudioAttributes audioAttributes) {
     sink.setAudioAttributes(audioAttributes);
   }
@@ -124,8 +120,8 @@ public class ForwardingAudioSink implements AudioSink {
   }
 
   @Override
-  public void enableTunnelingV21() {
-    sink.enableTunnelingV21();
+  public void enableTunnelingV21(int tunnelingAudioSessionId) {
+    sink.enableTunnelingV21(tunnelingAudioSessionId);
   }
 
   @Override
@@ -146,11 +142,6 @@ public class ForwardingAudioSink implements AudioSink {
   @Override
   public void flush() {
     sink.flush();
-  }
-
-  @Override
-  public void experimentalFlushWithoutAudioTrackRelease() {
-    sink.experimentalFlushWithoutAudioTrackRelease();
   }
 
   @Override

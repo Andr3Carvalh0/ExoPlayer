@@ -24,6 +24,8 @@ import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
 import com.google.android.exoplayer2.ParserException;
+import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.extractor.ExtractorInput;
 import com.google.android.exoplayer2.extractor.TrackOutput;
 import com.google.android.exoplayer2.metadata.Metadata;
 import com.google.android.exoplayer2.metadata.MetadataInputBuffer;
@@ -33,7 +35,6 @@ import com.google.android.exoplayer2.source.SampleQueue;
 import com.google.android.exoplayer2.source.chunk.Chunk;
 import com.google.android.exoplayer2.source.dash.manifest.DashManifest;
 import com.google.android.exoplayer2.upstream.Allocator;
-import com.google.android.exoplayer2.upstream.DataReader;
 import com.google.android.exoplayer2.util.ParsableByteArray;
 import com.google.android.exoplayer2.util.Util;
 import java.io.IOException;
@@ -85,7 +86,8 @@ public final class PlayerEmsgHandler implements Handler.Callback {
   private DashManifest manifest;
 
   private long expiredManifestPublishTimeUs;
-  private boolean chunkLoadedCompletedSinceLastManifestRefreshRequest;
+  private long lastLoadedChunkEndTimeUs;
+  private long lastLoadedChunkEndTimeBeforeRefreshUs;
   private boolean isWaitingForManifestRefresh;
   private boolean released;
 
@@ -102,8 +104,10 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     this.allocator = allocator;
 
     manifestPublishTimeToExpiryTimeUs = new TreeMap<>();
-    handler = Util.createHandlerForCurrentLooper(/* callback= */ this);
+    handler = Util.createHandler(/* callback= */ this);
     decoder = new EventMessageDecoder();
+    lastLoadedChunkEndTimeUs = C.TIME_UNSET;
+    lastLoadedChunkEndTimeBeforeRefreshUs = C.TIME_UNSET;
   }
 
   /**
@@ -116,6 +120,78 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     expiredManifestPublishTimeUs = C.TIME_UNSET;
     this.manifest = newManifest;
     removePreviouslyExpiredManifestPublishTimeValues();
+  }
+
+  /* package */ boolean maybeRefreshManifestBeforeLoadingNextChunk(long presentationPositionUs) {
+    if (!manifest.dynamic) {
+      return false;
+    }
+    if (isWaitingForManifestRefresh) {
+      return true;
+    }
+    boolean manifestRefreshNeeded = false;
+    // Find the smallest publishTime (greater than or equal to the current manifest's publish time)
+    // that has a corresponding expiry time.
+    Map.Entry<Long, Long> expiredEntry = ceilingExpiryEntryForPublishTime(manifest.publishTimeMs);
+    if (expiredEntry != null) {
+      long expiredPointUs = expiredEntry.getValue();
+      if (expiredPointUs < presentationPositionUs) {
+        expiredManifestPublishTimeUs = expiredEntry.getKey();
+        notifyManifestPublishTimeExpired();
+        manifestRefreshNeeded = true;
+      }
+    }
+    if (manifestRefreshNeeded) {
+      maybeNotifyDashManifestRefreshNeeded();
+    }
+    return manifestRefreshNeeded;
+  }
+
+  /**
+   * For live streaming with emsg event stream, forward seeking can seek pass the emsg messages that
+   * signals end-of-stream or Manifest expiry, which results in load error. In this case, we should
+   * notify the Dash media source to refresh its manifest.
+   *
+   * @param chunk The chunk whose load encountered the error.
+   * @return True if manifest refresh has been requested, false otherwise.
+   */
+  /* package */ boolean maybeRefreshManifestOnLoadingError(Chunk chunk) {
+    if (!manifest.dynamic) {
+      return false;
+    }
+    if (isWaitingForManifestRefresh) {
+      return true;
+    }
+    boolean isAfterForwardSeek =
+        lastLoadedChunkEndTimeUs != C.TIME_UNSET && lastLoadedChunkEndTimeUs < chunk.startTimeUs;
+    if (isAfterForwardSeek) {
+      // if we are after a forward seek, and the playback is dynamic with embedded emsg stream,
+      // there's a chance that we have seek over the emsg messages, in which case we should ask
+      // media source for a refresh.
+      maybeNotifyDashManifestRefreshNeeded();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Called when the a new chunk in the current media stream has been loaded.
+   *
+   * @param chunk The chunk whose load has been completed.
+   */
+  /* package */ void onChunkLoadCompleted(Chunk chunk) {
+    if (lastLoadedChunkEndTimeUs != C.TIME_UNSET || chunk.endTimeUs > lastLoadedChunkEndTimeUs) {
+      lastLoadedChunkEndTimeUs = chunk.endTimeUs;
+    }
+  }
+
+  /**
+   * Returns whether an event with given schemeIdUri and value is a DASH emsg event targeting the
+   * player.
+   */
+  public static boolean isPlayerEmsgEvent(String schemeIdUri, String value) {
+    return "urn:mpeg:dash:event:2012".equals(schemeIdUri)
+        && ("1".equals(value) || "2".equals(value) || "3".equals(value));
   }
 
   /** Returns a {@link TrackOutput} that emsg messages could be written to. */
@@ -148,52 +224,6 @@ public final class PlayerEmsgHandler implements Handler.Callback {
 
   // Internal methods.
 
-  /* package */ boolean maybeRefreshManifestBeforeLoadingNextChunk(long presentationPositionUs) {
-    if (!manifest.dynamic) {
-      return false;
-    }
-    if (isWaitingForManifestRefresh) {
-      return true;
-    }
-    boolean manifestRefreshNeeded = false;
-    // Find the smallest publishTime (greater than or equal to the current manifest's publish time)
-    // that has a corresponding expiry time.
-    Map.Entry<Long, Long> expiredEntry = ceilingExpiryEntryForPublishTime(manifest.publishTimeMs);
-    if (expiredEntry != null) {
-      long expiredPointUs = expiredEntry.getValue();
-      if (expiredPointUs < presentationPositionUs) {
-        expiredManifestPublishTimeUs = expiredEntry.getKey();
-        notifyManifestPublishTimeExpired();
-        manifestRefreshNeeded = true;
-      }
-    }
-    if (manifestRefreshNeeded) {
-      maybeNotifyDashManifestRefreshNeeded();
-    }
-    return manifestRefreshNeeded;
-  }
-
-  /* package */ void onChunkLoadCompleted(Chunk chunk) {
-    chunkLoadedCompletedSinceLastManifestRefreshRequest = true;
-  }
-
-  /* package */ boolean onChunkLoadError(boolean isForwardSeek) {
-    if (!manifest.dynamic) {
-      return false;
-    }
-    if (isWaitingForManifestRefresh) {
-      return true;
-    }
-    if (isForwardSeek) {
-      // If a forward seek has occurred, there's a chance that the seek has skipped EMSGs signalling
-      // end-of-stream or manifest expiration. We must assume that the manifest might need to be
-      // refreshed.
-      maybeNotifyDashManifestRefreshNeeded();
-      return true;
-    }
-    return false;
-  }
-
   private void handleManifestExpiredMessage(long eventTimeUs, long manifestPublishTimeMsInEmsg) {
     Long previousExpiryTimeUs = manifestPublishTimeToExpiryTimeUs.get(manifestPublishTimeMsInEmsg);
     if (previousExpiryTimeUs == null) {
@@ -205,8 +235,7 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     }
   }
 
-  @Nullable
-  private Map.Entry<Long, Long> ceilingExpiryEntryForPublishTime(long publishTimeMs) {
+  private @Nullable Map.Entry<Long, Long> ceilingExpiryEntryForPublishTime(long publishTimeMs) {
     return manifestPublishTimeToExpiryTimeUs.ceilingEntry(publishTimeMs);
   }
 
@@ -228,12 +257,13 @@ public final class PlayerEmsgHandler implements Handler.Callback {
 
   /** Requests DASH media manifest to be refreshed if necessary. */
   private void maybeNotifyDashManifestRefreshNeeded() {
-    if (!chunkLoadedCompletedSinceLastManifestRefreshRequest) {
-      // Don't request a refresh unless some progress has been made.
+    if (lastLoadedChunkEndTimeBeforeRefreshUs != C.TIME_UNSET
+        && lastLoadedChunkEndTimeBeforeRefreshUs == lastLoadedChunkEndTimeUs) {
+      // Already requested manifest refresh.
       return;
     }
     isWaitingForManifestRefresh = true;
-    chunkLoadedCompletedSinceLastManifestRefreshRequest = false;
+    lastLoadedChunkEndTimeBeforeRefreshUs = lastLoadedChunkEndTimeUs;
     playerEmsgCallback.onDashManifestRefreshRequested();
   }
 
@@ -246,15 +276,6 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     }
   }
 
-  /**
-   * Returns whether an event with given schemeIdUri and value is a DASH emsg event targeting the
-   * player.
-   */
-  private static boolean isPlayerEmsgEvent(String schemeIdUri, String value) {
-    return "urn:mpeg:dash:event:2012".equals(schemeIdUri)
-        && ("1".equals(value) || "2".equals(value) || "3".equals(value));
-  }
-
   /** Handles emsg messages for a specific track for the player. */
   public final class PlayerTrackEmsgHandler implements TrackOutput {
 
@@ -262,13 +283,10 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     private final FormatHolder formatHolder;
     private final MetadataInputBuffer buffer;
 
-    private long maxLoadedChunkEndTimeUs;
-
     /* package */ PlayerTrackEmsgHandler(Allocator allocator) {
-      this.sampleQueue = SampleQueue.createWithoutDrm(allocator);
+      this.sampleQueue = new SampleQueue(allocator, DrmSessionManager.getDummyDrmSessionManager());
       formatHolder = new FormatHolder();
       buffer = new MetadataInputBuffer();
-      maxLoadedChunkEndTimeUs = C.TIME_UNSET;
     }
 
     @Override
@@ -277,14 +295,13 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     }
 
     @Override
-    public int sampleData(
-        DataReader input, int length, boolean allowEndOfInput, @SampleDataPart int sampleDataPart)
-        throws IOException {
+    public int sampleData(ExtractorInput input, int length, boolean allowEndOfInput)
+        throws IOException, InterruptedException {
       return sampleQueue.sampleData(input, length, allowEndOfInput);
     }
 
     @Override
-    public void sampleData(ParsableByteArray data, int length, @SampleDataPart int sampleDataPart) {
+    public void sampleData(ParsableByteArray data, int length) {
       sampleQueue.sampleData(data, length);
     }
 
@@ -308,27 +325,24 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     }
 
     /**
-     * Called when a chunk load has been completed.
+     * Called when the a new chunk in the current media stream has been loaded.
      *
      * @param chunk The chunk whose load has been completed.
      */
     public void onChunkLoadCompleted(Chunk chunk) {
-      if (maxLoadedChunkEndTimeUs == C.TIME_UNSET || chunk.endTimeUs > maxLoadedChunkEndTimeUs) {
-        maxLoadedChunkEndTimeUs = chunk.endTimeUs;
-      }
       PlayerEmsgHandler.this.onChunkLoadCompleted(chunk);
     }
 
     /**
-     * Called when a chunk load has encountered an error.
+     * For live streaming with emsg event stream, forward seeking can seek pass the emsg messages
+     * that signals end-of-stream or Manifest expiry, which results in load error. In this case, we
+     * should notify the Dash media source to refresh its manifest.
      *
-     * @param chunk The chunk whose load encountered an error.
-     * @return Whether a manifest refresh has been requested.
+     * @param chunk The chunk whose load encountered the error.
+     * @return True if manifest refresh has been requested, false otherwise.
      */
-    public boolean onChunkLoadError(Chunk chunk) {
-      boolean isAfterForwardSeek =
-          maxLoadedChunkEndTimeUs != C.TIME_UNSET && maxLoadedChunkEndTimeUs < chunk.startTimeUs;
-      return PlayerEmsgHandler.this.onChunkLoadError(isAfterForwardSeek);
+    public boolean maybeRefreshManifestOnLoadingError(Chunk chunk) {
+      return PlayerEmsgHandler.this.maybeRefreshManifestOnLoadingError(chunk);
     }
 
     /** Release this track emsg handler. It should not be reused after this call. */
@@ -340,15 +354,12 @@ public final class PlayerEmsgHandler implements Handler.Callback {
 
     private void parseAndDiscardSamples() {
       while (sampleQueue.isReady(/* loadingFinished= */ false)) {
-        @Nullable MetadataInputBuffer inputBuffer = dequeueSample();
+        MetadataInputBuffer inputBuffer = dequeueSample();
         if (inputBuffer == null) {
           continue;
         }
         long eventTimeUs = inputBuffer.timeUs;
-        @Nullable Metadata metadata = decoder.decode(inputBuffer);
-        if (metadata == null) {
-          continue;
-        }
+        Metadata metadata = decoder.decode(inputBuffer);
         EventMessage eventMessage = (EventMessage) metadata.get(0);
         if (isPlayerEmsgEvent(eventMessage.schemeIdUri, eventMessage.value)) {
           parsePlayerEmsgEvent(eventTimeUs, eventMessage);
@@ -361,7 +372,12 @@ public final class PlayerEmsgHandler implements Handler.Callback {
     private MetadataInputBuffer dequeueSample() {
       buffer.clear();
       int result =
-          sampleQueue.read(formatHolder, buffer, /* readFlags= */ 0, /* loadingFinished= */ false);
+          sampleQueue.read(
+              formatHolder,
+              buffer,
+              /* formatRequired= */ false,
+              /* loadingFinished= */ false,
+              /* decodeOnlyUntilUs= */ 0);
       if (result == C.RESULT_BUFFER_READ) {
         buffer.flip();
         return buffer;

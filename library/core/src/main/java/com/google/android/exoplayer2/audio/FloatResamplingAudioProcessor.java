@@ -16,19 +16,13 @@
 package com.google.android.exoplayer2.audio;
 
 import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.Format;
+import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
 import java.nio.ByteBuffer;
 
 /**
- * An {@link AudioProcessor} that converts high resolution PCM audio to 32-bit float. The following
- * encodings are supported as input:
- *
- * <ul>
- *   <li>{@link C#ENCODING_PCM_24BIT}
- *   <li>{@link C#ENCODING_PCM_32BIT}
- *   <li>{@link C#ENCODING_PCM_FLOAT} ({@link #isActive()} will return {@code false})
- * </ul>
+ * An {@link AudioProcessor} that converts 24-bit and 32-bit integer PCM audio to 32-bit float PCM
+ * audio.
  */
 /* package */ final class FloatResamplingAudioProcessor extends BaseAudioProcessor {
 
@@ -38,11 +32,10 @@ import java.nio.ByteBuffer;
   @Override
   public AudioFormat onConfigure(AudioFormat inputAudioFormat)
       throws UnhandledAudioFormatException {
-    @C.PcmEncoding int encoding = inputAudioFormat.encoding;
-    if (!Util.isEncodingHighResolutionPcm(encoding)) {
+    if (!Util.isEncodingHighResolutionIntegerPcm(inputAudioFormat.encoding)) {
       throw new UnhandledAudioFormatException(inputAudioFormat);
     }
-    return encoding != C.ENCODING_PCM_FLOAT
+    return Util.isEncodingHighResolutionIntegerPcm(inputAudioFormat.encoding)
         ? new AudioFormat(
             inputAudioFormat.sampleRate, inputAudioFormat.channelCount, C.ENCODING_PCM_FLOAT)
         : AudioFormat.NOT_SET;
@@ -50,42 +43,31 @@ import java.nio.ByteBuffer;
 
   @Override
   public void queueInput(ByteBuffer inputBuffer) {
+    Assertions.checkState(Util.isEncodingHighResolutionIntegerPcm(inputAudioFormat.encoding));
+    boolean isInput32Bit = inputAudioFormat.encoding == C.ENCODING_PCM_32BIT;
     int position = inputBuffer.position();
     int limit = inputBuffer.limit();
     int size = limit - position;
 
-    ByteBuffer buffer;
-    switch (inputAudioFormat.encoding) {
-      case C.ENCODING_PCM_24BIT:
-        buffer = replaceOutputBuffer((size / 3) * 4);
-        for (int i = position; i < limit; i += 3) {
-          int pcm32BitInteger =
-              ((inputBuffer.get(i) & 0xFF) << 8)
-                  | ((inputBuffer.get(i + 1) & 0xFF) << 16)
-                  | ((inputBuffer.get(i + 2) & 0xFF) << 24);
-          writePcm32BitFloat(pcm32BitInteger, buffer);
-        }
-        break;
-      case C.ENCODING_PCM_32BIT:
-        buffer = replaceOutputBuffer(size);
-        for (int i = position; i < limit; i += 4) {
-          int pcm32BitInteger =
-              (inputBuffer.get(i) & 0xFF)
-                  | ((inputBuffer.get(i + 1) & 0xFF) << 8)
-                  | ((inputBuffer.get(i + 2) & 0xFF) << 16)
-                  | ((inputBuffer.get(i + 3) & 0xFF) << 24);
-          writePcm32BitFloat(pcm32BitInteger, buffer);
-        }
-        break;
-      case C.ENCODING_PCM_8BIT:
-      case C.ENCODING_PCM_16BIT:
-      case C.ENCODING_PCM_16BIT_BIG_ENDIAN:
-      case C.ENCODING_PCM_FLOAT:
-      case C.ENCODING_INVALID:
-      case Format.NO_VALUE:
-      default:
-        // Never happens.
-        throw new IllegalStateException();
+    int resampledSize = isInput32Bit ? size : (size / 3) * 4;
+    ByteBuffer buffer = replaceOutputBuffer(resampledSize);
+    if (isInput32Bit) {
+      for (int i = position; i < limit; i += 4) {
+        int pcm32BitInteger =
+            (inputBuffer.get(i) & 0xFF)
+                | ((inputBuffer.get(i + 1) & 0xFF) << 8)
+                | ((inputBuffer.get(i + 2) & 0xFF) << 16)
+                | ((inputBuffer.get(i + 3) & 0xFF) << 24);
+        writePcm32BitFloat(pcm32BitInteger, buffer);
+      }
+    } else { // Input is 24-bit PCM.
+      for (int i = position; i < limit; i += 3) {
+        int pcm32BitInteger =
+            ((inputBuffer.get(i) & 0xFF) << 8)
+                | ((inputBuffer.get(i + 1) & 0xFF) << 16)
+                | ((inputBuffer.get(i + 2) & 0xFF) << 24);
+        writePcm32BitFloat(pcm32BitInteger, buffer);
+      }
     }
 
     inputBuffer.position(inputBuffer.limit());

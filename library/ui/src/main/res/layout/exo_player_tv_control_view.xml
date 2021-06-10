@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="false"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:orientation="vertical">
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:focusableInTouchMode="false">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:focusableInTouchMode="false"
+            android:id="@+id/rootView">
+
+            <androidx.constraintlayout.widget.Guideline
+                android:id="@+id/notch_guideline_start"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintGuide_begin="0dp" />
+
+            <androidx.constraintlayout.widget.Guideline
+                android:id="@+id/notch_guideline_end"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintGuide_end="0dp" />
+
+            <View
+                android:id="@+id/gradient"
+                android:layout_width="match_parent"
+                android:layout_height="192dp"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:background="@drawable/controllers_gradient"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/epg"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/nexta"
+                android:nextFocusRight="@id/previousa"
+                app:active_drawable="@drawable/icon_guide"
+                app:inactive_drawable="@drawable/icon_guide"
+                app:layout_constraintBottom_toBottomOf="@+id/playback"
+                app:layout_constraintTop_toTopOf="@+id/playback"
+                app:layout_constraintEnd_toStartOf="@+id/previousa"
+                android:layout_marginEnd="32dp" />
+
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/previousa"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginEnd="32dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/epg"
+                android:nextFocusRight="@id/backwards"
+                app:active_drawable="@drawable/icon_backward"
+                app:inactive_drawable="@drawable/icon_backward"
+                app:layout_constraintBottom_toBottomOf="@+id/playback"
+                app:layout_constraintEnd_toStartOf="@+id/backwards"
+                app:layout_constraintTop_toTopOf="@+id/playback" />
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/nexta"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusRight="@id/epg"
+                android:nextFocusLeft="@id/forward"
+                app:active_drawable="@drawable/icon_forward"
+                app:inactive_drawable="@drawable/icon_forward"
+                app:layout_constraintBottom_toBottomOf="@+id/playback"
+                app:layout_constraintStart_toEndOf="@+id/forward"
+                app:layout_constraintTop_toTopOf="@+id/playback"
+                android:layout_marginStart="32dp" />
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/backwards"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginEnd="32dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/previousa"
+                android:nextFocusRight="@id/playback"
+                app:active_drawable="@drawable/icon_30_seconds_back"
+                app:inactive_drawable="@drawable/icon_30_seconds_back"
+                app:layout_constraintBottom_toBottomOf="@+id/playback"
+                app:layout_constraintEnd_toStartOf="@+id/playback"
+                app:layout_constraintTop_toTopOf="@+id/playback" />
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/forward"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginStart="32dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/playback"
+                android:nextFocusRight="@id/nexta"
+                app:active_drawable="@drawable/icon_30_seconds_forward"
+                app:inactive_drawable="@drawable/icon_30_seconds_forward"
+                app:layout_constraintBottom_toBottomOf="@+id/playback"
+                app:layout_constraintStart_toEndOf="@+id/playback"
+                app:layout_constraintTop_toTopOf="@+id/playback" />
+
+            <com.google.android.exoplayer2.ui.views.TVPlaybackButton
+                android:id="@+id/playback"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                app:override_size="32dp"
+                android:focusableInTouchMode="true"
+                android:focusable="true"
+                android:clickable="true"
+                android:focusedByDefault="true"
+                android:nextFocusLeft="@id/backwards"
+                android:nextFocusRight="@id/forward"
+                app:active_drawable="@drawable/icon_pause"
+                app:inactive_drawable="@drawable/icon_play"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="@+id/guidelide"
+                app:layout_constraintEnd_toEndOf="@+id/guidelide"
+                android:layout_marginBottom="16dp" />
+
+            <com.google.android.exoplayer2.ui.views.TVMetadataView
+                android:id="@+id/metadata"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:visibility="visible"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintBottom_toTopOf="@+id/seekbar"
+                app:layout_constraintEnd_toEndOf="@+id/duration"
+                app:layout_constraintStart_toStartOf="@+id/current" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/current"
+                android:layout_width="wrap_content"
+                android:layout_height="0dp"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintStart_toStartOf="@+id/notch_guideline_start"
+                android:layout_marginStart="8dp"
+                app:layout_constraintBottom_toTopOf="@+id/playback"
+                android:layout_marginBottom="16dp">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/currentTime"
+                    style="@style/KPNMetricSemiBold"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:includeFontPadding="false"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:paddingRight="4dp"
+                    android:textSize="24sp"
+                    android:text="00:01"
+                    android:textColor="@color/kpn_grey"
+                    app:layout_constraintStart_toEndOf="@+id/startover"
+                    tools:visibility="visible" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.exoplayer2.ui.DefaultTimeBar
+                android:id="@+id/seekbar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="26dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintBottom_toBottomOf="@+id/current"
+                app:layout_constraintEnd_toStartOf="@+id/duration"
+                app:layout_constraintStart_toEndOf="@+id/current"
+                app:layout_constraintTop_toTopOf="@+id/current" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/duration"
+                style="@style/KPNMetricSemiBold"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_goneMarginEnd="16dp"
+                android:includeFontPadding="false"
+                android:paddingLeft="4dp"
+                android:text="30:00"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:textSize="24sp"
+                android:textColor="@color/kpn_grey"
+                app:layout_constraintBottom_toBottomOf="@+id/seekbar"
+                app:layout_constraintTop_toTopOf="@+id/seekbar"
+                app:layout_constraintEnd_toStartOf="@+id/notch_guideline_end"
+                android:layout_marginEnd="8dp" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/live"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="32dp"
+                app:layout_goneMarginEnd="16dp"
+                android:orientation="horizontal"
+                android:visibility="visible"
+                android:clickable="true"
+                android:focusable="true"
+                android:defaultFocusHighlightEnabled="true"
+                android:nextFocusRight="@id/previousa"
+                android:nextFocusLeft="@id/nexta"
+                android:background="@drawable/live_b_background"
+                android:focusableInTouchMode="true"
+                app:layout_constraintEnd_toStartOf="@+id/mode"
+                tools:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="@+id/nexta"
+                app:layout_constraintTop_toTopOf="@+id/nexta">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/playLiveIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="2dp"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="4dp"
+                    android:focusableInTouchMode="false"
+                    android:tint="@color/kpn_green"
+                    android:defaultFocusHighlightEnabled="true"
+                    app:srcCompat="@drawable/icon_play_mini" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/playLiveText"
+                    style="@style/KPNMetricSemiBold"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/live_text_label"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:textSize="18sp"
+                    android:layout_marginTop="4dp"
+                    android:defaultFocusHighlightEnabled="true"
+                    android:layout_marginBottom="4dp"
+                    android:layout_marginEnd="16dp"
+                    android:textColor="@color/kpn_green" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/mode"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginBottom="6dp"
+                android:layout_marginRight="16dp"
+                android:src="@drawable/icon_fullscreen"
+                android:tint="@color/kpn_grey"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@+id/notch_guideline_end"
+                tools:visibility="gone" />
+
+            <androidx.constraintlayout.widget.Guideline
+                android:id="@+id/guidelide"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:layout_constraintGuide_percent="0.5" />
+
+            <androidx.constraintlayout.widget.Barrier
+                android:id="@+id/barrier_bottom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:barrierAllowsGoneWidgets="false"
+                app:barrierDirection="bottom"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                app:constraint_referenced_ids="current,seekbar,duration,live,mode"
+                tools:layout_editor_absoluteY="955dp" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/moreContentSheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp"
+            app:behavior_hideable="true"
+            app:behavior_peekHeight="0dp"
+            android:focusableInTouchMode="false"
+            android:focusable="false"
+            app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/moreContentList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:focusableInTouchMode="false"
+                android:focusable="false"
+                tools:orientation="horizontal" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

@@ -30,22 +30,18 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public final class SubripDecoderTest {
 
-  private static final String EMPTY_FILE = "media/subrip/empty";
-  private static final String TYPICAL_FILE = "media/subrip/typical";
-  private static final String TYPICAL_WITH_BYTE_ORDER_MARK =
-      "media/subrip/typical_with_byte_order_mark";
-  private static final String TYPICAL_EXTRA_BLANK_LINE = "media/subrip/typical_extra_blank_line";
-  private static final String TYPICAL_MISSING_TIMECODE = "media/subrip/typical_missing_timecode";
-  private static final String TYPICAL_MISSING_SEQUENCE = "media/subrip/typical_missing_sequence";
-  private static final String TYPICAL_NEGATIVE_TIMESTAMPS =
-      "media/subrip/typical_negative_timestamps";
-  private static final String TYPICAL_UNEXPECTED_END = "media/subrip/typical_unexpected_end";
-  private static final String TYPICAL_WITH_TAGS = "media/subrip/typical_with_tags";
-  private static final String TYPICAL_NO_HOURS_AND_MILLIS =
-      "media/subrip/typical_no_hours_and_millis";
+  private static final String EMPTY_FILE = "subrip/empty";
+  private static final String TYPICAL_FILE = "subrip/typical";
+  private static final String TYPICAL_WITH_BYTE_ORDER_MARK = "subrip/typical_with_byte_order_mark";
+  private static final String TYPICAL_EXTRA_BLANK_LINE = "subrip/typical_extra_blank_line";
+  private static final String TYPICAL_MISSING_TIMECODE = "subrip/typical_missing_timecode";
+  private static final String TYPICAL_MISSING_SEQUENCE = "subrip/typical_missing_sequence";
+  private static final String TYPICAL_NEGATIVE_TIMESTAMPS = "subrip/typical_negative_timestamps";
+  private static final String TYPICAL_UNEXPECTED_END = "subrip/typical_unexpected_end";
+  private static final String TYPICAL_WITH_TAGS = "subrip/typical_with_tags";
 
   @Test
-  public void decodeEmpty() throws IOException {
+  public void testDecodeEmpty() throws IOException {
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes = TestUtil.getByteArray(ApplicationProvider.getApplicationContext(), EMPTY_FILE);
     Subtitle subtitle = decoder.decode(bytes, bytes.length, false);
@@ -55,7 +51,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypical() throws IOException {
+  public void testDecodeTypical() throws IOException {
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes = TestUtil.getByteArray(ApplicationProvider.getApplicationContext(), TYPICAL_FILE);
     Subtitle subtitle = decoder.decode(bytes, bytes.length, false);
@@ -67,7 +63,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalWithByteOrderMark() throws IOException {
+  public void testDecodeTypicalWithByteOrderMark() throws IOException {
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
         TestUtil.getByteArray(
@@ -81,7 +77,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalExtraBlankLine() throws IOException {
+  public void testDecodeTypicalExtraBlankLine() throws IOException {
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
         TestUtil.getByteArray(
@@ -95,7 +91,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalMissingTimecode() throws IOException {
+  public void testDecodeTypicalMissingTimecode() throws IOException {
     // Parsing should succeed, parsing the first and third cues only.
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
@@ -109,7 +105,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalMissingSequence() throws IOException {
+  public void testDecodeTypicalMissingSequence() throws IOException {
     // Parsing should succeed, parsing the first and third cues only.
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
@@ -123,7 +119,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalNegativeTimestamps() throws IOException {
+  public void testDecodeTypicalNegativeTimestamps() throws IOException {
     // Parsing should succeed, parsing the third cue only.
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
@@ -136,7 +132,7 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeTypicalUnexpectedEnd() throws IOException {
+  public void testDecodeTypicalUnexpectedEnd() throws IOException {
     // Parsing should succeed, parsing the first and second cues only.
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
@@ -149,20 +145,15 @@ public final class SubripDecoderTest {
   }
 
   @Test
-  public void decodeCueWithTag() throws IOException {
+  public void testDecodeCueWithTag() throws IOException {
     SubripDecoder decoder = new SubripDecoder();
     byte[] bytes =
         TestUtil.getByteArray(ApplicationProvider.getApplicationContext(), TYPICAL_WITH_TAGS);
     Subtitle subtitle = decoder.decode(bytes, bytes.length, false);
 
-    assertThat(subtitle.getCues(subtitle.getEventTime(0)).get(0).text.toString())
-        .isEqualTo("This is the first subtitle.");
-
-    assertThat(subtitle.getCues(subtitle.getEventTime(2)).get(0).text.toString())
-        .isEqualTo("This is the second subtitle.\nSecond subtitle with second line.");
-
-    assertThat(subtitle.getCues(subtitle.getEventTime(4)).get(0).text.toString())
-        .isEqualTo("This is the third subtitle.");
+    assertTypicalCue1(subtitle, 0);
+    assertTypicalCue2(subtitle, 2);
+    assertTypicalCue3(subtitle, 4);
 
     assertThat(subtitle.getCues(subtitle.getEventTime(6)).get(0).text.toString())
         .isEqualTo("This { \\an2} is not a valid tag due to the space after the opening bracket.");
@@ -181,21 +172,6 @@ public final class SubripDecoderTest {
     assertAlignmentCue(subtitle, 26, Cue.ANCHOR_TYPE_START, Cue.ANCHOR_TYPE_END); // {/an9}
   }
 
-  @Test
-  public void decodeTypicalNoHoursAndMillis() throws IOException {
-    SubripDecoder decoder = new SubripDecoder();
-    byte[] bytes =
-        TestUtil.getByteArray(
-            ApplicationProvider.getApplicationContext(), TYPICAL_NO_HOURS_AND_MILLIS);
-    Subtitle subtitle = decoder.decode(bytes, bytes.length, false);
-
-    assertThat(subtitle.getEventTimeCount()).isEqualTo(6);
-    assertTypicalCue1(subtitle, 0);
-    assertThat(subtitle.getEventTime(2)).isEqualTo(2_000_000);
-    assertThat(subtitle.getEventTime(3)).isEqualTo(3_000_000);
-    assertTypicalCue3(subtitle, 4);
-  }
-
   private static void assertTypicalCue1(Subtitle subtitle, int eventIndex) {
     assertThat(subtitle.getEventTime(eventIndex)).isEqualTo(0);
     assertThat(subtitle.getCues(subtitle.getEventTime(eventIndex)).get(0).text.toString())
@@ -211,12 +187,10 @@ public final class SubripDecoderTest {
   }
 
   private static void assertTypicalCue3(Subtitle subtitle, int eventIndex) {
-    long expectedStartTimeUs = (((2L * 60L * 60L) + 4L) * 1000L + 567L) * 1000L;
-    assertThat(subtitle.getEventTime(eventIndex)).isEqualTo(expectedStartTimeUs);
+    assertThat(subtitle.getEventTime(eventIndex)).isEqualTo(4567000);
     assertThat(subtitle.getCues(subtitle.getEventTime(eventIndex)).get(0).text.toString())
         .isEqualTo("This is the third subtitle.");
-    long expectedEndTimeUs = (((2L * 60L * 60L) + 8L) * 1000L + 901L) * 1000L;
-    assertThat(subtitle.getEventTime(eventIndex + 1)).isEqualTo(expectedEndTimeUs);
+    assertThat(subtitle.getEventTime(eventIndex + 1)).isEqualTo(8901000);
   }
 
   private static void assertAlignmentCue(

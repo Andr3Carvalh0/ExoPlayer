@@ -11,23 +11,70 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-apply from: "$gradle.ext.exoplayerSettingsDir/common_library_config.gradle"
+apply from: '../../constants.gradle'
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
 
-android.buildTypes.debug.testCoverageEnabled true
+android {
+    compileSdkVersion project.ext.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion project.ext.minSdkVersion
+        targetSdkVersion project.ext.compileSdkVersion
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            debuggable false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), './../core/proguard-rules.pro'
+
+        }        
+        debug {
+            testCoverageEnabled = true
+        }
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    testOptions.unitTests.includeAndroidResources = true
+}
 
 dependencies {
-    implementation project(modulePrefix + 'library-core')
+    implementation project(modulePrefix + 'core')
+    implementation project(path: ':iconography')
+    implementation project(path: ':components')
+
     api 'androidx.media:media:' + androidxMediaVersion
+
+    implementation 'androidx.appcompat:appcompat:' + androidxAppCompatVersion
+    implementation 'androidx.constraintlayout:constraintlayout:' + androidxConstraintLayout
+    implementation 'com.github.bumptech.glide:glide:' + glideVersion
+    annotationProcessor 'com.github.bumptech.glide:compiler:' + glideCompilerVersion
+    implementation 'androidx.core:core-ktx:' + androidxKotlinCoreVersion
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:' + kotlin_version
+    implementation 'com.google.android.material:material:' + androidxMaterialVersion
     implementation 'androidx.annotation:annotation:' + androidxAnnotationVersion
-    implementation 'androidx.recyclerview:recyclerview:' + androidxRecyclerViewVersion
+
     compileOnly 'org.checkerframework:checker-qual:' + checkerframeworkVersion
-    compileOnly 'org.jetbrains.kotlin:kotlin-annotations-jvm:' + kotlinAnnotationsVersion
     testImplementation project(modulePrefix + 'testutils')
     testImplementation 'org.robolectric:robolectric:' + robolectricVersion
 }
 
 ext {
     javadocTitle = 'UI module'
+}
+
+repositories {
+    google()
 }
 apply from: '../../javadoc_library.gradle'
 

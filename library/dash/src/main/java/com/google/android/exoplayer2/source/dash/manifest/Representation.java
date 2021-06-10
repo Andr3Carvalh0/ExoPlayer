@@ -17,7 +17,6 @@ package com.google.android.exoplayer2.source.dash.manifest;
 
 import android.net.Uri;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.source.dash.DashSegmentIndex;
@@ -26,7 +25,9 @@ import com.google.android.exoplayer2.source.dash.manifest.SegmentBase.SingleSegm
 import java.util.Collections;
 import java.util.List;
 
-/** A DASH representation. */
+/**
+ * A DASH representation.
+ */
 public abstract class Representation {
 
   /**
@@ -89,12 +90,7 @@ public abstract class Representation {
       SegmentBase segmentBase,
       @Nullable List<Descriptor> inbandEventStreams) {
     return newInstance(
-        revisionId,
-        format,
-        baseUrl,
-        segmentBase,
-        inbandEventStreams,
-        /* cacheKey= */ null);
+        revisionId, format, baseUrl, segmentBase, inbandEventStreams, /* cacheKey= */ null);
   }
 
   /**
@@ -279,11 +275,9 @@ public abstract class Representation {
   public static class MultiSegmentRepresentation extends Representation
       implements DashSegmentIndex {
 
-    @VisibleForTesting /* package */ final MultiSegmentBase segmentBase;
+    private final MultiSegmentBase segmentBase;
 
     /**
-     * Creates the multi-segment Representation.
-     *
      * @param revisionId Identifies the revision of the content.
      * @param format The format of the representation.
      * @param baseUrl The base URL of the representation.
@@ -345,23 +339,8 @@ public abstract class Representation {
     }
 
     @Override
-    public long getFirstAvailableSegmentNum(long periodDurationUs, long nowUnixTimeUs) {
-      return segmentBase.getFirstAvailableSegmentNum(periodDurationUs, nowUnixTimeUs);
-    }
-
-    @Override
-    public long getSegmentCount(long periodDurationUs) {
+    public int getSegmentCount(long periodDurationUs) {
       return segmentBase.getSegmentCount(periodDurationUs);
-    }
-
-    @Override
-    public long getAvailableSegmentCount(long periodDurationUs, long nowUnixTimeUs) {
-      return segmentBase.getAvailableSegmentCount(periodDurationUs, nowUnixTimeUs);
-    }
-
-    @Override
-    public long getNextSegmentAvailableTimeUs(long periodDurationUs, long nowUnixTimeUs) {
-      return segmentBase.getNextSegmentAvailableTimeUs(periodDurationUs, nowUnixTimeUs);
     }
 
     @Override

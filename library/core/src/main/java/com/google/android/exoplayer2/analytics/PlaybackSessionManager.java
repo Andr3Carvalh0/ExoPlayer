@@ -15,7 +15,6 @@
  */
 package com.google.android.exoplayer2.analytics;
 
-import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Player.DiscontinuityReason;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.analytics.AnalyticsListener.EventTime;
@@ -100,47 +99,22 @@ public interface PlaybackSessionManager {
   /**
    * Updates or creates sessions based on a player {@link EventTime}.
    *
-   * <p>Call {@link #updateSessionsWithTimelineChange(EventTime)} or {@link
-   * #updateSessionsWithDiscontinuity(EventTime, int)} if the event is a {@link Timeline} change or
-   * a position discontinuity respectively.
-   *
    * @param eventTime The {@link EventTime}.
    */
   void updateSessions(EventTime eventTime);
 
   /**
-   * Updates or creates sessions based on a {@link Timeline} change at {@link EventTime}.
+   * Updates the session associations to a new timeline.
    *
-   * <p>Should be called instead of {@link #updateSessions(EventTime)} if a {@link Timeline} change
-   * occurred.
-   *
-   * @param eventTime The {@link EventTime} with the timeline change.
+   * @param eventTime The event time with the timeline change.
    */
-  void updateSessionsWithTimelineChange(EventTime eventTime);
+  void handleTimelineUpdate(EventTime eventTime);
 
   /**
-   * Updates or creates sessions based on a position discontinuity at {@link EventTime}.
+   * Handles a position discontinuity.
    *
-   * <p>Should be called instead of {@link #updateSessions(EventTime)} if a position discontinuity
-   * occurred.
-   *
-   * @param eventTime The {@link EventTime} of the position discontinuity.
+   * @param eventTime The event time of the position discontinuity.
    * @param reason The {@link DiscontinuityReason}.
    */
-  void updateSessionsWithDiscontinuity(EventTime eventTime, @DiscontinuityReason int reason);
-
-  /**
-   * Returns the session identifier of the session that is currently actively playing, or {@code
-   * null} if there no such session.
-   */
-  @Nullable
-  String getActiveSessionId();
-
-  /**
-   * Finishes all existing sessions and calls their respective {@link
-   * Listener#onSessionFinished(EventTime, String, boolean)} callback.
-   *
-   * @param eventTime The event time at which sessions are finished.
-   */
-  void finishAllSessions(EventTime eventTime);
+  void handlePositionDiscontinuity(EventTime eventTime, @DiscontinuityReason int reason);
 }

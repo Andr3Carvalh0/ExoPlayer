@@ -16,26 +16,20 @@
 package com.google.android.exoplayer2;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
-import static org.robolectric.Shadows.shadowOf;
 
 import android.net.Uri;
-import android.os.Handler;
-import android.os.Looper;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.MediaSource.MediaPeriodId;
 import com.google.android.exoplayer2.source.SinglePeriodTimeline;
 import com.google.android.exoplayer2.source.ads.AdPlaybackState;
 import com.google.android.exoplayer2.source.ads.SinglePeriodAdTimeline;
-import com.google.android.exoplayer2.testutil.FakeMediaSource;
-import com.google.android.exoplayer2.testutil.FakeShuffleOrder;
-import com.google.android.exoplayer2.testutil.FakeTimeline;
-import com.google.android.exoplayer2.testutil.FakeTimeline.TimelineWindowDefinition;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.trackselection.TrackSelector;
 import com.google.android.exoplayer2.trackselection.TrackSelectorResult;
 import com.google.android.exoplayer2.upstream.Allocator;
-import com.google.common.collect.ImmutableList;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,34 +45,24 @@ public final class MediaPeriodQueueTest {
 
   private static final Timeline CONTENT_TIMELINE =
       new SinglePeriodTimeline(
-          CONTENT_DURATION_US,
-          /* isSeekable= */ true,
-          /* isDynamic= */ false,
-          /* useLiveConfiguration= */ false,
-          /* manifest= */ null,
-          MediaItem.fromUri(Uri.EMPTY));
+          CONTENT_DURATION_US, /* isSeekable= */ true, /* isDynamic= */ false, /* isLive= */ false);
   private static final Uri AD_URI = Uri.EMPTY;
 
   private MediaPeriodQueue mediaPeriodQueue;
   private AdPlaybackState adPlaybackState;
-  private Object firstPeriodUid;
+  private Timeline timeline;
+  private Object periodUid;
 
   private PlaybackInfo playbackInfo;
   private RendererCapabilities[] rendererCapabilities;
   private TrackSelector trackSelector;
   private Allocator allocator;
-  private MediaSourceList mediaSourceList;
-  private FakeMediaSource fakeMediaSource;
+  private MediaSource mediaSource;
 
   @Before
   public void setUp() {
-    mediaPeriodQueue =
-        new MediaPeriodQueue(/* analyticsCollector= */ null, new Handler(Looper.getMainLooper()));
-    mediaSourceList =
-        new MediaSourceList(
-            mock(MediaSourceList.MediaSourceListInfoRefreshListener.class),
-            /* analyticsCollector= */ null,
-            new Handler(Looper.getMainLooper()));
+    mediaPeriodQueue = new MediaPeriodQueue();
+    mediaSource = mock(MediaSource.class);
     rendererCapabilities = new RendererCapabilities[0];
     trackSelector = mock(TrackSelector.class);
     allocator = mock(Allocator.class);
@@ -86,244 +70,147 @@ public final class MediaPeriodQueueTest {
 
   @Test
   public void getNextMediaPeriodInfo_withoutAds_returnsLastMediaPeriodInfo() {
-    setupAdTimeline(/* no ad groups */ );
+    setupTimeline(/* initialPositionUs= */ 0);
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
         /* endPositionUs= */ C.TIME_UNSET,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
+        /* isLast= */ true,
         /* nextAdGroupIndex= */ C.INDEX_UNSET);
   }
 
   @Test
   public void getNextMediaPeriodInfo_withPrerollAd_returnsCorrectMediaPeriodInfos() {
-    setupAdTimeline(/* adGroupTimesUs...= */ 0);
+    setupTimeline(/* initialPositionUs= */ 0, /* adGroupTimesUs...= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
-    assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 0, AD_DURATION_US, /* contentPositionUs= */ C.TIME_UNSET);
+    assertNextMediaPeriodInfoIsAd(/* adGroupIndex= */ 0, /* contentPositionUs= */ 0);
     advance();
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
         /* endPositionUs= */ C.TIME_UNSET,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
+        /* isLast= */ true,
         /* nextAdGroupIndex= */ C.INDEX_UNSET);
   }
 
   @Test
   public void getNextMediaPeriodInfo_withMidrollAds_returnsCorrectMediaPeriodInfos() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
         /* endPositionUs= */ FIRST_AD_START_TIME_US,
         /* durationUs= */ FIRST_AD_START_TIME_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
+        /* isLast= */ false,
         /* nextAdGroupIndex= */ 0);
+    // The next media period info should be null as we haven't loaded the ad yet.
     advance();
-    assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 0,
-        /* adDurationUs= */ C.TIME_UNSET,
-        /* contentPositionUs= */ FIRST_AD_START_TIME_US);
+    assertNull(getNextMediaPeriodInfo());
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 0, AD_DURATION_US, /* contentPositionUs= */ FIRST_AD_START_TIME_US);
+        /* adGroupIndex= */ 0, /* contentPositionUs= */ FIRST_AD_START_TIME_US);
     advance();
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ FIRST_AD_START_TIME_US,
-        /* requestedContentPositionUs= */ FIRST_AD_START_TIME_US,
         /* endPositionUs= */ SECOND_AD_START_TIME_US,
         /* durationUs= */ SECOND_AD_START_TIME_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
+        /* isLast= */ false,
         /* nextAdGroupIndex= */ 1);
     advance();
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 1, AD_DURATION_US, /* contentPositionUs= */ SECOND_AD_START_TIME_US);
+        /* adGroupIndex= */ 1, /* contentPositionUs= */ SECOND_AD_START_TIME_US);
     advance();
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ SECOND_AD_START_TIME_US,
-        /* requestedContentPositionUs= */ SECOND_AD_START_TIME_US,
         /* endPositionUs= */ C.TIME_UNSET,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
+        /* isLast= */ true,
         /* nextAdGroupIndex= */ C.INDEX_UNSET);
   }
 
   @Test
   public void getNextMediaPeriodInfo_withMidrollAndPostroll_returnsCorrectMediaPeriodInfos() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, C.TIME_END_OF_SOURCE);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        C.TIME_END_OF_SOURCE);
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
         /* endPositionUs= */ FIRST_AD_START_TIME_US,
         /* durationUs= */ FIRST_AD_START_TIME_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
+        /* isLast= */ false,
         /* nextAdGroupIndex= */ 0);
     advance();
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 0, AD_DURATION_US, /* contentPositionUs= */ FIRST_AD_START_TIME_US);
+        /* adGroupIndex= */ 0, /* contentPositionUs= */ FIRST_AD_START_TIME_US);
     advance();
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ FIRST_AD_START_TIME_US,
-        /* requestedContentPositionUs= */ FIRST_AD_START_TIME_US,
         /* endPositionUs= */ C.TIME_END_OF_SOURCE,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
+        /* isLast= */ false,
         /* nextAdGroupIndex= */ 1);
     advance();
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 1, AD_DURATION_US, /* contentPositionUs= */ CONTENT_DURATION_US);
+        /* adGroupIndex= */ 1, /* contentPositionUs= */ CONTENT_DURATION_US);
     advance();
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
-        /* startPositionUs= */ CONTENT_DURATION_US - 1,
-        /* requestedContentPositionUs= */ CONTENT_DURATION_US,
+        /* startPositionUs= */ CONTENT_DURATION_US,
         /* endPositionUs= */ C.TIME_UNSET,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
+        /* isLast= */ true,
         /* nextAdGroupIndex= */ C.INDEX_UNSET);
   }
 
   @Test
   public void getNextMediaPeriodInfo_withPostrollLoadError_returnsEmptyFinalMediaPeriodInfo() {
-    setupAdTimeline(/* adGroupTimesUs...= */ C.TIME_END_OF_SOURCE);
+    setupTimeline(/* initialPositionUs= */ 0, /* adGroupTimesUs...= */ C.TIME_END_OF_SOURCE);
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
         /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
         /* endPositionUs= */ C.TIME_END_OF_SOURCE,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
+        /* isLast= */ false,
         /* nextAdGroupIndex= */ 0);
     advance();
     setAdGroupFailedToLoad(/* adGroupIndex= */ 0);
     assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
-        /* startPositionUs= */ CONTENT_DURATION_US - 1,
-        /* requestedContentPositionUs= */ CONTENT_DURATION_US,
+        /* startPositionUs= */ CONTENT_DURATION_US,
         /* endPositionUs= */ C.TIME_UNSET,
         /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
-        /* nextAdGroupIndex= */ C.INDEX_UNSET);
-  }
-
-  @Test
-  public void getNextMediaPeriodInfo_withPlayedAdGroups_returnsCorrectMediaPeriodInfos() {
-    setupAdTimeline(/* adGroupTimesUs...= */ 0, FIRST_AD_START_TIME_US, C.TIME_END_OF_SOURCE);
-    setAdGroupLoaded(/* adGroupIndex= */ 0);
-    setAdGroupLoaded(/* adGroupIndex= */ 1);
-    setAdGroupLoaded(/* adGroupIndex= */ 2);
-    assertNextMediaPeriodInfoIsAd(
-        /* adGroupIndex= */ 0, AD_DURATION_US, /* contentPositionUs= */ C.TIME_UNSET);
-    setAdGroupPlayed(/* adGroupIndex= */ 0);
-    clear();
-    assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
-        /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
-        /* endPositionUs= */ FIRST_AD_START_TIME_US,
-        /* durationUs= */ FIRST_AD_START_TIME_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
-        /* nextAdGroupIndex= */ 1);
-    setAdGroupPlayed(/* adGroupIndex= */ 1);
-    clear();
-    assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
-        /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
-        /* endPositionUs= */ C.TIME_END_OF_SOURCE,
-        /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ false,
-        /* isLastInWindow= */ false,
-        /* nextAdGroupIndex= */ 2);
-    setAdGroupPlayed(/* adGroupIndex= */ 2);
-    clear();
-    assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ firstPeriodUid,
-        /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
-        /* endPositionUs= */ C.TIME_UNSET,
-        /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
-        /* nextAdGroupIndex= */ C.INDEX_UNSET);
-  }
-
-  @Test
-  public void getNextMediaPeriodInfo_inMultiPeriodWindow_returnsCorrectMediaPeriodInfos() {
-    setupTimeline(
-        new FakeTimeline(
-            new TimelineWindowDefinition(
-                /* periodCount= */ 2,
-                /* id= */ new Object(),
-                /* isSeekable= */ false,
-                /* isDynamic= */ false,
-                /* durationUs= */ 2 * CONTENT_DURATION_US)));
-
-    assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ playbackInfo.timeline.getUidOfPeriod(/* periodIndex= */ 0),
-        /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ C.TIME_UNSET,
-        /* endPositionUs= */ C.TIME_UNSET,
-        /* durationUs= */ CONTENT_DURATION_US
-            + TimelineWindowDefinition.DEFAULT_WINDOW_OFFSET_IN_FIRST_PERIOD_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ false,
-        /* nextAdGroupIndex= */ C.INDEX_UNSET);
-    advance();
-    assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-        /* periodUid= */ playbackInfo.timeline.getUidOfPeriod(/* periodIndex= */ 1),
-        /* startPositionUs= */ 0,
-        /* requestedContentPositionUs= */ 0,
-        /* endPositionUs= */ C.TIME_UNSET,
-        /* durationUs= */ CONTENT_DURATION_US,
-        /* isLastInPeriod= */ true,
-        /* isLastInWindow= */ true,
+        /* isLast= */ true,
         /* nextAdGroupIndex= */ C.INDEX_UNSET);
   }
 
   @Test
   public void
       updateQueuedPeriods_withDurationChangeAfterReadingPeriod_handlesChangeAndRemovesPeriodsAfterChangedPeriod() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     enqueueNext(); // Content before first ad.
+    advancePlaying();
     enqueueNext(); // First ad.
     enqueueNext(); // Content between ads.
     enqueueNext(); // Second ad.
 
     // Change position of second ad (= change duration of content between ads).
-    updateAdPlaybackStateAndTimeline(
-        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US - 1000);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US + 1);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     boolean changeHandled =
         mediaPeriodQueue.updateQueuedPeriods(
-            playbackInfo.timeline, /* rendererPositionUs= */ 0, /* maxRendererReadPositionUs= */ 0);
+            /* rendererPositionUs= */ 0, /* maxRendererReadPositionUs= */ 0);
 
     assertThat(changeHandled).isTrue();
     assertThat(getQueueLength()).isEqualTo(3);
@@ -332,39 +219,45 @@ public final class MediaPeriodQueueTest {
   @Test
   public void
       updateQueuedPeriods_withDurationChangeBeforeReadingPeriod_doesntHandleChangeAndRemovesPeriodsAfterChangedPeriod() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     enqueueNext(); // Content before first ad.
+    advancePlaying();
     enqueueNext(); // First ad.
     enqueueNext(); // Content between ads.
     enqueueNext(); // Second ad.
     advanceReading(); // Reading first ad.
-    advanceReading(); // Reading content between ads.
-    advanceReading(); // Reading second ad.
 
-    // Change position of second ad (= change duration of content between ads).
-    updateAdPlaybackStateAndTimeline(
-        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US - 1000);
+    // Change position of first ad (= change duration of content before first ad).
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US + 1,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     boolean changeHandled =
         mediaPeriodQueue.updateQueuedPeriods(
-            playbackInfo.timeline,
-            /* rendererPositionUs= */ 0,
-            /* maxRendererReadPositionUs= */ FIRST_AD_START_TIME_US);
+            /* rendererPositionUs= */ 0, /* maxRendererReadPositionUs= */ FIRST_AD_START_TIME_US);
 
     assertThat(changeHandled).isFalse();
-    assertThat(getQueueLength()).isEqualTo(3);
+    assertThat(getQueueLength()).isEqualTo(1);
   }
 
   @Test
   public void
       updateQueuedPeriods_withDurationChangeInReadingPeriodAfterReadingPosition_handlesChangeAndRemovesPeriodsAfterChangedPeriod() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     enqueueNext(); // Content before first ad.
+    advancePlaying();
     enqueueNext(); // First ad.
     enqueueNext(); // Content between ads.
     enqueueNext(); // Second ad.
@@ -372,14 +265,15 @@ public final class MediaPeriodQueueTest {
     advanceReading(); // Reading content between ads.
 
     // Change position of second ad (= change duration of content between ads).
-    updateAdPlaybackStateAndTimeline(
-        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US - 1000);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US - 1000);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     long readingPositionAtStartOfContentBetweenAds = FIRST_AD_START_TIME_US + AD_DURATION_US;
     boolean changeHandled =
         mediaPeriodQueue.updateQueuedPeriods(
-            playbackInfo.timeline,
             /* rendererPositionUs= */ 0,
             /* maxRendererReadPositionUs= */ readingPositionAtStartOfContentBetweenAds);
 
@@ -390,10 +284,14 @@ public final class MediaPeriodQueueTest {
   @Test
   public void
       updateQueuedPeriods_withDurationChangeInReadingPeriodBeforeReadingPosition_doesntHandleChangeAndRemovesPeriodsAfterChangedPeriod() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     enqueueNext(); // Content before first ad.
+    advancePlaying();
     enqueueNext(); // First ad.
     enqueueNext(); // Content between ads.
     enqueueNext(); // Second ad.
@@ -401,14 +299,15 @@ public final class MediaPeriodQueueTest {
     advanceReading(); // Reading content between ads.
 
     // Change position of second ad (= change duration of content between ads).
-    updateAdPlaybackStateAndTimeline(
-        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US - 1000);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US - 1000);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     long readingPositionAtEndOfContentBetweenAds = SECOND_AD_START_TIME_US + AD_DURATION_US;
     boolean changeHandled =
         mediaPeriodQueue.updateQueuedPeriods(
-            playbackInfo.timeline,
             /* rendererPositionUs= */ 0,
             /* maxRendererReadPositionUs= */ readingPositionAtEndOfContentBetweenAds);
 
@@ -419,10 +318,14 @@ public final class MediaPeriodQueueTest {
   @Test
   public void
       updateQueuedPeriods_withDurationChangeInReadingPeriodReadToEnd_doesntHandleChangeAndRemovesPeriodsAfterChangedPeriod() {
-    setupAdTimeline(/* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     enqueueNext(); // Content before first ad.
+    advancePlaying();
     enqueueNext(); // First ad.
     enqueueNext(); // Content between ads.
     enqueueNext(); // Second ad.
@@ -430,62 +333,41 @@ public final class MediaPeriodQueueTest {
     advanceReading(); // Reading content between ads.
 
     // Change position of second ad (= change duration of content between ads).
-    updateAdPlaybackStateAndTimeline(
-        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US, SECOND_AD_START_TIME_US - 1000);
+    setupTimeline(
+        /* initialPositionUs= */ 0,
+        /* adGroupTimesUs...= */ FIRST_AD_START_TIME_US,
+        SECOND_AD_START_TIME_US - 1000);
     setAdGroupLoaded(/* adGroupIndex= */ 0);
     setAdGroupLoaded(/* adGroupIndex= */ 1);
     boolean changeHandled =
         mediaPeriodQueue.updateQueuedPeriods(
-            playbackInfo.timeline,
-            /* rendererPositionUs= */ 0,
-            /* maxRendererReadPositionUs= */ C.TIME_END_OF_SOURCE);
+            /* rendererPositionUs= */ 0, /* maxRendererReadPositionUs= */ C.TIME_END_OF_SOURCE);
 
     assertThat(changeHandled).isFalse();
     assertThat(getQueueLength()).isEqualTo(3);
   }
 
-  private void setupAdTimeline(long... adGroupTimesUs) {
+  private void setupTimeline(long initialPositionUs, long... adGroupTimesUs) {
     adPlaybackState =
-        new AdPlaybackState(/* adsId= */ new Object(), adGroupTimesUs)
-            .withContentDurationUs(CONTENT_DURATION_US);
-    SinglePeriodAdTimeline adTimeline =
-        new SinglePeriodAdTimeline(CONTENT_TIMELINE, adPlaybackState);
-    setupTimeline(adTimeline);
-  }
-
-  private void setupTimeline(Timeline timeline) {
-    fakeMediaSource = new FakeMediaSource(timeline);
-    MediaSourceList.MediaSourceHolder mediaSourceHolder =
-        new MediaSourceList.MediaSourceHolder(fakeMediaSource, /* useLazyPreparation= */ false);
-    mediaSourceList.setMediaSources(
-        ImmutableList.of(mediaSourceHolder), new FakeShuffleOrder(/* length= */ 1));
-    mediaSourceHolder.mediaSource.prepareSourceInternal(/* mediaTransferListener */ null);
-
-    Timeline playlistTimeline = mediaSourceList.createTimeline();
-    firstPeriodUid = playlistTimeline.getUidOfPeriod(/* periodIndex= */ 0);
-
+        new AdPlaybackState(adGroupTimesUs).withContentDurationUs(CONTENT_DURATION_US);
+    timeline = new SinglePeriodAdTimeline(CONTENT_TIMELINE, adPlaybackState);
+    periodUid = timeline.getUidOfPeriod(/* periodIndex= */ 0);
+    mediaPeriodQueue.setTimeline(timeline);
     playbackInfo =
         new PlaybackInfo(
-            playlistTimeline,
-            mediaPeriodQueue.resolveMediaPeriodIdForAds(
-                playlistTimeline, firstPeriodUid, /* positionUs= */ 0),
-            /* requestedContentPositionUs= */ C.TIME_UNSET,
-            /* discontinuityStartPositionUs= */ 0,
+            timeline,
+            mediaPeriodQueue.resolveMediaPeriodIdForAds(periodUid, initialPositionUs),
+            /* startPositionUs= */ 0,
+            /* contentPositionUs= */ 0,
             Player.STATE_READY,
             /* playbackError= */ null,
             /* isLoading= */ false,
             /* trackGroups= */ null,
             /* trackSelectorResult= */ null,
-            /* staticMetadata= */ ImmutableList.of(),
             /* loadingMediaPeriodId= */ null,
-            /* playWhenReady= */ false,
-            Player.PLAYBACK_SUPPRESSION_REASON_NONE,
-            /* playbackParameters= */ PlaybackParameters.DEFAULT,
             /* bufferedPositionUs= */ 0,
             /* totalBufferedDurationUs= */ 0,
-            /* positionUs= */ 0,
-            /* offloadSchedulingEnabled= */ false,
-            /* sleepingForOffload= */ false);
+            /* positionUs= */ 0);
   }
 
   private void advance() {
@@ -508,25 +390,10 @@ public final class MediaPeriodQueueTest {
         rendererCapabilities,
         trackSelector,
         allocator,
-        mediaSourceList,
+        mediaSource,
         getNextMediaPeriodInfo(),
         new TrackSelectorResult(
-            new RendererConfiguration[0], new ExoTrackSelection[0], /* info= */ null));
-  }
-
-  private void clear() {
-    mediaPeriodQueue.clear();
-    playbackInfo =
-        playbackInfo.copyWithNewPosition(
-            mediaPeriodQueue.resolveMediaPeriodIdForAds(
-                mediaSourceList.createTimeline(), firstPeriodUid, /* positionUs= */ 0),
-            /* positionUs= */ 0,
-            /* requestedContentPositionUs= */ C.TIME_UNSET,
-            /* discontinuityStartPositionUs= */ 0,
-            /* totalBufferedDurationUs= */ 0,
-            /* trackGroups= */ null,
-            /* trackSelectorResult= */ null,
-            /* staticMetadata= */ ImmutableList.of());
+            new RendererConfiguration[0], new TrackSelection[0], /* info= */ null));
   }
 
   private MediaPeriodInfo getNextMediaPeriodInfo() {
@@ -547,13 +414,6 @@ public final class MediaPeriodQueueTest {
     updateTimeline();
   }
 
-  private void setAdGroupPlayed(int adGroupIndex) {
-    for (int i = 0; i < adPlaybackState.adGroups[adGroupIndex].count; i++) {
-      adPlaybackState = adPlaybackState.withPlayedAd(adGroupIndex, /* adIndexInAdGroup= */ i);
-    }
-    updateTimeline();
-  }
-
   private void setAdGroupFailedToLoad(int adGroupIndex) {
     adPlaybackState =
         adPlaybackState
@@ -562,60 +422,43 @@ public final class MediaPeriodQueueTest {
     updateTimeline();
   }
 
-  private void updateAdPlaybackStateAndTimeline(long... adGroupTimesUs) {
-    adPlaybackState =
-        new AdPlaybackState(/* adsId= */ new Object(), adGroupTimesUs)
-            .withContentDurationUs(CONTENT_DURATION_US);
-    updateTimeline();
-  }
-
   private void updateTimeline() {
-    SinglePeriodAdTimeline adTimeline =
-        new SinglePeriodAdTimeline(CONTENT_TIMELINE, adPlaybackState);
-    fakeMediaSource.setNewSourceInfo(adTimeline);
-    // Progress the looper so that the source info events have been executed.
-    shadowOf(Looper.getMainLooper()).idle();
-    playbackInfo = playbackInfo.copyWithTimeline(mediaSourceList.createTimeline());
+    timeline = new SinglePeriodAdTimeline(CONTENT_TIMELINE, adPlaybackState);
+    mediaPeriodQueue.setTimeline(timeline);
   }
 
   private void assertGetNextMediaPeriodInfoReturnsContentMediaPeriod(
-      Object periodUid,
       long startPositionUs,
-      long requestedContentPositionUs,
       long endPositionUs,
       long durationUs,
-      boolean isLastInPeriod,
-      boolean isLastInWindow,
+      boolean isLast,
       int nextAdGroupIndex) {
     assertThat(getNextMediaPeriodInfo())
         .isEqualTo(
             new MediaPeriodInfo(
                 new MediaPeriodId(periodUid, /* windowSequenceNumber= */ 0, nextAdGroupIndex),
                 startPositionUs,
-                requestedContentPositionUs,
+                /* contentPositionUs= */ C.TIME_UNSET,
                 endPositionUs,
                 durationUs,
-                isLastInPeriod,
-                isLastInWindow,
-                /* isFinal= */ isLastInWindow));
+                /* isLastInTimelinePeriod= */ isLast,
+                /* isFinal= */ isLast));
   }
 
-  private void assertNextMediaPeriodInfoIsAd(
-      int adGroupIndex, long adDurationUs, long contentPositionUs) {
+  private void assertNextMediaPeriodInfoIsAd(int adGroupIndex, long contentPositionUs) {
     assertThat(getNextMediaPeriodInfo())
         .isEqualTo(
             new MediaPeriodInfo(
                 new MediaPeriodId(
-                    firstPeriodUid,
+                    periodUid,
                     adGroupIndex,
                     /* adIndexInAdGroup= */ 0,
                     /* windowSequenceNumber= */ 0),
                 /* startPositionUs= */ 0,
                 contentPositionUs,
                 /* endPositionUs= */ C.TIME_UNSET,
-                adDurationUs,
+                /* durationUs= */ AD_DURATION_US,
                 /* isLastInTimelinePeriod= */ false,
-                /* isLastInTimelineWindow= */ false,
                 /* isFinal= */ false));
   }
 

@@ -15,8 +15,6 @@
  */
 package com.google.android.exoplayer2.upstream;
 
-import static com.google.android.exoplayer2.util.Assertions.checkNotNull;
-
 import android.net.Uri;
 import androidx.annotation.Nullable;
 import java.io.IOException;
@@ -97,7 +95,6 @@ public final class ResolvingDataSource implements DataSource {
 
   @Override
   public void addTransferListener(TransferListener transferListener) {
-    checkNotNull(transferListener);
     upstreamDataSource.addTransferListener(transferListener);
   }
 
@@ -113,10 +110,10 @@ public final class ResolvingDataSource implements DataSource {
     return upstreamDataSource.read(buffer, offset, readLength);
   }
 
-  @Override
   @Nullable
+  @Override
   public Uri getUri() {
-    @Nullable Uri reportedUri = upstreamDataSource.getUri();
+    Uri reportedUri = upstreamDataSource.getUri();
     return reportedUri == null ? null : resolver.resolveReportedUri(reportedUri);
   }
 

@@ -20,7 +20,6 @@ import android.media.AudioTimestamp;
 import android.media.AudioTrack;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Util;
 import java.lang.annotation.Documented;
@@ -38,7 +37,7 @@ import java.lang.annotation.RetentionPolicy;
  *
  * <p>If {@link #hasTimestamp()} returns {@code true}, call {@link #getTimestampSystemTimeUs()} to
  * get the system time at which the latest timestamp was sampled and {@link
- * #getTimestampPositionFrames()} to get its position in frames. If {@link #hasAdvancingTimestamp()}
+ * #getTimestampPositionFrames()} to get its position in frames. If {@link #isTimestampAdvancing()}
  * returns {@code true}, the caller should assume that the timestamp has been increasing in real
  * time since it was sampled. Otherwise, it may be stationary.
  *
@@ -69,7 +68,7 @@ import java.lang.annotation.RetentionPolicy;
   private static final int STATE_ERROR = 4;
 
   /** The polling interval for {@link #STATE_INITIALIZING} and {@link #STATE_TIMESTAMP}. */
-  private static final int FAST_POLL_INTERVAL_US = 10_000;
+  private static final int FAST_POLL_INTERVAL_US = 5_000;
   /**
    * The polling interval for {@link #STATE_TIMESTAMP_ADVANCING} and {@link #STATE_NO_TIMESTAMP}.
    */
@@ -111,12 +110,11 @@ import java.lang.annotation.RetentionPolicy;
    * timestamp is available via {@link #getTimestampSystemTimeUs()} and {@link
    * #getTimestampPositionFrames()}, and the caller should call {@link #acceptTimestamp()} if the
    * timestamp was valid, or {@link #rejectTimestamp()} otherwise. The values returned by {@link
-   * #hasTimestamp()} and {@link #hasAdvancingTimestamp()} may be updated.
+   * #hasTimestamp()} and {@link #isTimestampAdvancing()} may be updated.
    *
    * @param systemTimeUs The current system time, in microseconds.
    * @return Whether the timestamp was updated.
    */
-  @TargetApi(19) // audioTimestamp will be null if Util.SDK_INT < 19.
   public boolean maybePollTimestamp(long systemTimeUs) {
     if (audioTimestamp == null || (systemTimeUs - lastTimestampSampleTimeUs) < sampleIntervalUs) {
       return false;
@@ -202,12 +200,12 @@ import java.lang.annotation.RetentionPolicy;
   }
 
   /**
-   * Returns whether this instance has an advancing timestamp. If {@code true}, call {@link
+   * Returns whether the timestamp appears to be advancing. If {@code true}, call {@link
    * #getTimestampSystemTimeUs()} and {@link #getTimestampSystemTimeUs()} to access the timestamp. A
    * current position for the track can be extrapolated based on elapsed real time since the system
    * time at which the timestamp was sampled.
    */
-  public boolean hasAdvancingTimestamp() {
+  public boolean isTimestampAdvancing() {
     return state == STATE_TIMESTAMP_ADVANCING;
   }
 
@@ -222,7 +220,6 @@ import java.lang.annotation.RetentionPolicy;
    * If {@link #maybePollTimestamp(long)} or {@link #hasTimestamp()} returned {@code true}, returns
    * the system time at which the latest timestamp was sampled, in microseconds.
    */
-  @TargetApi(19) // audioTimestamp will be null if Util.SDK_INT < 19.
   public long getTimestampSystemTimeUs() {
     return audioTimestamp != null ? audioTimestamp.getTimestampSystemTimeUs() : C.TIME_UNSET;
   }
@@ -231,7 +228,6 @@ import java.lang.annotation.RetentionPolicy;
    * If {@link #maybePollTimestamp(long)} or {@link #hasTimestamp()} returned {@code true}, returns
    * the latest timestamp's position in frames.
    */
-  @TargetApi(19) // audioTimestamp will be null if Util.SDK_INT < 19.
   public long getTimestampPositionFrames() {
     return audioTimestamp != null ? audioTimestamp.getTimestampPositionFrames() : C.POSITION_UNSET;
   }
@@ -261,7 +257,7 @@ import java.lang.annotation.RetentionPolicy;
     }
   }
 
-  @RequiresApi(19)
+  @TargetApi(19)
   private static final class AudioTimestampV19 {
 
     private final AudioTrack audioTrack;

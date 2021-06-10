@@ -30,8 +30,8 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * A flushing variant of a AES/CTR/NoPadding {@link Cipher}.
  *
- * <p>Unlike a regular {@link Cipher}, the update methods of this class are guaranteed to process
- * all of the bytes input (and hence output the same number of bytes).
+ * Unlike a regular {@link Cipher}, the update methods of this class are guaranteed to process all
+ * of the bytes input (and hence output the same number of bytes).
  */
 public final class AesFlushingCipher {
 

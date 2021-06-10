@@ -15,6 +15,7 @@
  */
 package com.google.android.exoplayer2.util;
 
+import android.annotation.TargetApi;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -25,13 +26,12 @@ import android.opengl.GLES20;
 import android.os.Handler;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /** Generates a {@link SurfaceTexture} using EGL/GLES functions. */
-@RequiresApi(17)
+@TargetApi(17)
 public final class EGLSurfaceTexture implements SurfaceTexture.OnFrameAvailableListener, Runnable {
 
   /** Listener to be called when the texture image on {@link SurfaceTexture} has been updated. */

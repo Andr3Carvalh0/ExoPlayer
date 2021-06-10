@@ -20,7 +20,9 @@ import com.google.android.exoplayer2.SeekParameters;
 import java.io.IOException;
 import java.util.List;
 
-/** A provider of {@link Chunk}s for a {@link ChunkSampleStream} to load. */
+/**
+ * A provider of {@link Chunk}s for a {@link ChunkSampleStream} to load.
+ */
 public interface ChunkSource {
 
   /**
@@ -36,6 +38,8 @@ public interface ChunkSource {
   /**
    * If the source is currently having difficulty providing chunks, then this method throws the
    * underlying error. Otherwise does nothing.
+   * <p>
+   * This method should only be called after the source has been prepared.
    *
    * @throws IOException The underlying error.
    */
@@ -43,29 +47,16 @@ public interface ChunkSource {
 
   /**
    * Evaluates whether {@link MediaChunk}s should be removed from the back of the queue.
+   * <p>
+   * Removing {@link MediaChunk}s from the back of the queue can be useful if they could be replaced
+   * with chunks of a significantly higher quality (e.g. because the available bandwidth has
+   * substantially increased).
    *
-   * <p>Removing {@link MediaChunk}s from the back of the queue can be useful if they could be
-   * replaced with chunks of a significantly higher quality (e.g. because the available bandwidth
-   * has substantially increased).
-   *
-   * <p>Will only be called if no {@link MediaChunk} in the queue is currently loading.
-   *
-   * @param playbackPositionUs The current playback position, in microseconds.
+   * @param playbackPositionUs The current playback position.
    * @param queue The queue of buffered {@link MediaChunk}s.
    * @return The preferred queue size.
    */
   int getPreferredQueueSize(long playbackPositionUs, List<? extends MediaChunk> queue);
-
-  /**
-   * Returns whether an ongoing load of a chunk should be canceled.
-   *
-   * @param playbackPositionUs The current playback position, in microseconds.
-   * @param loadingChunk The currently loading {@link Chunk}.
-   * @param queue The queue of buffered {@link MediaChunk MediaChunks}.
-   * @return Whether the ongoing load of {@code loadingChunk} should be canceled.
-   */
-  boolean shouldCancelLoad(
-      long playbackPositionUs, Chunk loadingChunk, List<? extends MediaChunk> queue);
 
   /**
    * Returns the next chunk to load.
@@ -94,6 +85,8 @@ public interface ChunkSource {
    * Called when the {@link ChunkSampleStream} has finished loading a chunk obtained from this
    * source.
    *
+   * <p>This method should only be called when the source is enabled.
+   *
    * @param chunk The chunk whose load has been completed.
    */
   void onChunkLoadCompleted(Chunk chunk);
@@ -102,18 +95,17 @@ public interface ChunkSource {
    * Called when the {@link ChunkSampleStream} encounters an error loading a chunk obtained from
    * this source.
    *
+   * <p>This method should only be called when the source is enabled.
+   *
    * @param chunk The chunk whose load encountered the error.
    * @param cancelable Whether the load can be canceled.
    * @param e The error.
-   * @param exclusionDurationMs The duration for which the associated track may be excluded, or
-   *     {@link C#TIME_UNSET} if the track may not be excluded.
+   * @param blacklistDurationMs The duration for which the associated track may be blacklisted, or
+   *     {@link C#TIME_UNSET} if the track may not be blacklisted.
    * @return Whether the load should be canceled so that a replacement chunk can be loaded instead.
    *     Must be {@code false} if {@code cancelable} is {@code false}. If {@code true}, {@link
    *     #getNextChunk(long, long, List, ChunkHolder)} will be called to obtain the replacement
    *     chunk.
    */
-  boolean onChunkLoadError(Chunk chunk, boolean cancelable, Exception e, long exclusionDurationMs);
-
-  /** Releases any held resources. */
-  void release();
+  boolean onChunkLoadError(Chunk chunk, boolean cancelable, Exception e, long blacklistDurationMs);
 }

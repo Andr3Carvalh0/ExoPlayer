@@ -19,7 +19,9 @@ import android.net.Uri;
 import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
-/** Utility methods for manipulating URIs. */
+/**
+ * Utility methods for manipulating URIs.
+ */
 public final class UriUtil {
 
   /**

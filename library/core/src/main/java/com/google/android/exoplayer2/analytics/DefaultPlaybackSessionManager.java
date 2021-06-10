@@ -15,9 +15,6 @@
  */
 package com.google.android.exoplayer2.analytics;
 
-import static com.google.android.exoplayer2.C.usToMs;
-import static java.lang.Math.max;
-
 import android.util.Base64;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
@@ -28,7 +25,6 @@ import com.google.android.exoplayer2.analytics.AnalyticsListener.EventTime;
 import com.google.android.exoplayer2.source.MediaSource.MediaPeriodId;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
-import com.google.common.base.Supplier;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Random;
@@ -39,13 +35,9 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
  * Default {@link PlaybackSessionManager} which instantiates a new session for each window in the
  * timeline and also for each ad within the windows.
  *
- * <p>By default, sessions are identified by Base64-encoded, URL-safe, random strings.
+ * <p>Sessions are identified by Base64-encoded, URL-safe, random strings.
  */
 public final class DefaultPlaybackSessionManager implements PlaybackSessionManager {
-
-  /** Default generator for unique session ids that are random, Based64-encoded and URL-safe. */
-  public static final Supplier<String> DEFAULT_SESSION_ID_GENERATOR =
-      DefaultPlaybackSessionManager::generateDefaultSessionId;
 
   private static final Random RANDOM = new Random();
   private static final int SESSION_ID_LENGTH = 12;
@@ -53,27 +45,14 @@ public final class DefaultPlaybackSessionManager implements PlaybackSessionManag
   private final Timeline.Window window;
   private final Timeline.Period period;
   private final HashMap<String, SessionDescriptor> sessions;
-  private final Supplier<String> sessionIdGenerator;
 
   private @MonotonicNonNull Listener listener;
   private Timeline currentTimeline;
-  @Nullable private String currentSessionId;
+  @Nullable private MediaPeriodId currentMediaPeriodId;
+  @Nullable private String activeSessionId;
 
-  /**
-   * Creates session manager with a {@link #DEFAULT_SESSION_ID_GENERATOR} to generate session ids.
-   */
+  /** Creates session manager. */
   public DefaultPlaybackSessionManager() {
-    this(DEFAULT_SESSION_ID_GENERATOR);
-  }
-
-  /**
-   * Creates session manager.
-   *
-   * @param sessionIdGenerator A generator for new session ids. All generated session ids must be
-   *     unique.
-   */
-  public DefaultPlaybackSessionManager(Supplier<String> sessionIdGenerator) {
-    this.sessionIdGenerator = sessionIdGenerator;
     window = new Timeline.Window();
     period = new Timeline.Period();
     sessions = new HashMap<>();
@@ -104,74 +83,26 @@ public final class DefaultPlaybackSessionManager implements PlaybackSessionManag
 
   @Override
   public synchronized void updateSessions(EventTime eventTime) {
-    Assertions.checkNotNull(listener);
-    if (eventTime.timeline.isEmpty()) {
-      // Don't try to create new sessions for empty timelines.
-      return;
-    }
-    @Nullable SessionDescriptor currentSession = sessions.get(currentSessionId);
-    if (eventTime.mediaPeriodId != null && currentSession != null) {
-      // If we receive an event associated with a media period, then it needs to be either part of
-      // the current window if it's the first created media period, or a window that will be played
-      // in the future. Otherwise, we know that it belongs to a session that was already finished
-      // and we can ignore the event.
-      boolean isAlreadyFinished =
-          currentSession.windowSequenceNumber == C.INDEX_UNSET
-              ? currentSession.windowIndex != eventTime.windowIndex
-              : eventTime.mediaPeriodId.windowSequenceNumber < currentSession.windowSequenceNumber;
-      if (isAlreadyFinished) {
-        return;
+    boolean isObviouslyFinished =
+        eventTime.mediaPeriodId != null
+            && currentMediaPeriodId != null
+            && eventTime.mediaPeriodId.windowSequenceNumber
+                < currentMediaPeriodId.windowSequenceNumber;
+    if (!isObviouslyFinished) {
+      SessionDescriptor descriptor =
+          getOrAddSession(eventTime.windowIndex, eventTime.mediaPeriodId);
+      if (!descriptor.isCreated) {
+        descriptor.isCreated = true;
+        Assertions.checkNotNull(listener).onSessionCreated(eventTime, descriptor.sessionId);
+        if (activeSessionId == null) {
+          updateActiveSession(eventTime, descriptor);
+        }
       }
-    }
-    SessionDescriptor eventSession =
-        getOrAddSession(eventTime.windowIndex, eventTime.mediaPeriodId);
-    if (currentSessionId == null) {
-      currentSessionId = eventSession.sessionId;
-    }
-    if (eventTime.mediaPeriodId != null && eventTime.mediaPeriodId.isAd()) {
-      // Ensure that the content session for an ad session is created first.
-      MediaPeriodId contentMediaPeriodId =
-          new MediaPeriodId(
-              eventTime.mediaPeriodId.periodUid,
-              eventTime.mediaPeriodId.windowSequenceNumber,
-              eventTime.mediaPeriodId.adGroupIndex);
-      SessionDescriptor contentSession =
-          getOrAddSession(eventTime.windowIndex, contentMediaPeriodId);
-      if (!contentSession.isCreated) {
-        contentSession.isCreated = true;
-        eventTime.timeline.getPeriodByUid(eventTime.mediaPeriodId.periodUid, period);
-        long adGroupPositionMs =
-            usToMs(period.getAdGroupTimeUs(eventTime.mediaPeriodId.adGroupIndex))
-                + period.getPositionInWindowMs();
-        // getAdGroupTimeUs may return 0 for prerolls despite period offset.
-        adGroupPositionMs = max(0, adGroupPositionMs);
-        EventTime eventTimeForContent =
-            new EventTime(
-                eventTime.realtimeMs,
-                eventTime.timeline,
-                eventTime.windowIndex,
-                contentMediaPeriodId,
-                /* eventPlaybackPositionMs= */ adGroupPositionMs,
-                eventTime.currentTimeline,
-                eventTime.currentWindowIndex,
-                eventTime.currentMediaPeriodId,
-                eventTime.currentPlaybackPositionMs,
-                eventTime.totalBufferedDurationMs);
-        listener.onSessionCreated(eventTimeForContent, contentSession.sessionId);
-      }
-    }
-    if (!eventSession.isCreated) {
-      eventSession.isCreated = true;
-      listener.onSessionCreated(eventTime, eventSession.sessionId);
-    }
-    if (eventSession.sessionId.equals(currentSessionId) && !eventSession.isActive) {
-      eventSession.isActive = true;
-      listener.onSessionActive(eventTime, eventSession.sessionId);
     }
   }
 
   @Override
-  public synchronized void updateSessionsWithTimelineChange(EventTime eventTime) {
+  public synchronized void handleTimelineUpdate(EventTime eventTime) {
     Assertions.checkNotNull(listener);
     Timeline previousTimeline = currentTimeline;
     currentTimeline = eventTime.timeline;
@@ -181,92 +112,60 @@ public final class DefaultPlaybackSessionManager implements PlaybackSessionManag
       if (!session.tryResolvingToNewTimeline(previousTimeline, currentTimeline)) {
         iterator.remove();
         if (session.isCreated) {
-          if (session.sessionId.equals(currentSessionId)) {
-            currentSessionId = null;
+          if (session.sessionId.equals(activeSessionId)) {
+            activeSessionId = null;
           }
           listener.onSessionFinished(
               eventTime, session.sessionId, /* automaticTransitionToNextPlayback= */ false);
         }
       }
     }
-    updateCurrentSession(eventTime);
+    handlePositionDiscontinuity(eventTime, Player.DISCONTINUITY_REASON_INTERNAL);
   }
 
   @Override
-  public synchronized void updateSessionsWithDiscontinuity(
+  public synchronized void handlePositionDiscontinuity(
       EventTime eventTime, @DiscontinuityReason int reason) {
     Assertions.checkNotNull(listener);
-    boolean hasAutomaticTransition = reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION;
+    boolean hasAutomaticTransition =
+        reason == Player.DISCONTINUITY_REASON_PERIOD_TRANSITION
+            || reason == Player.DISCONTINUITY_REASON_AD_INSERTION;
     Iterator<SessionDescriptor> iterator = sessions.values().iterator();
     while (iterator.hasNext()) {
       SessionDescriptor session = iterator.next();
       if (session.isFinishedAtEventTime(eventTime)) {
         iterator.remove();
         if (session.isCreated) {
-          boolean isRemovingCurrentSession = session.sessionId.equals(currentSessionId);
-          boolean isAutomaticTransition =
-              hasAutomaticTransition && isRemovingCurrentSession && session.isActive;
-          if (isRemovingCurrentSession) {
-            currentSessionId = null;
+          boolean isRemovingActiveSession = session.sessionId.equals(activeSessionId);
+          boolean isAutomaticTransition = hasAutomaticTransition && isRemovingActiveSession;
+          if (isRemovingActiveSession) {
+            activeSessionId = null;
           }
           listener.onSessionFinished(eventTime, session.sessionId, isAutomaticTransition);
         }
       }
     }
-    updateCurrentSession(eventTime);
-  }
-
-  @Override
-  @Nullable
-  public synchronized String getActiveSessionId() {
-    return currentSessionId;
-  }
-
-  @Override
-  public synchronized void finishAllSessions(EventTime eventTime) {
-    currentSessionId = null;
-    Iterator<SessionDescriptor> iterator = sessions.values().iterator();
-    while (iterator.hasNext()) {
-      SessionDescriptor session = iterator.next();
-      iterator.remove();
-      if (session.isCreated && listener != null) {
-        listener.onSessionFinished(
-            eventTime, session.sessionId, /* automaticTransitionToNextPlayback= */ false);
-      }
-    }
-  }
-
-  @RequiresNonNull("listener")
-  private void updateCurrentSession(EventTime eventTime) {
-    if (eventTime.timeline.isEmpty()) {
-      // Clear current session if the Timeline is empty.
-      currentSessionId = null;
-      return;
-    }
-    @Nullable SessionDescriptor previousSessionDescriptor = sessions.get(currentSessionId);
-    SessionDescriptor currentSessionDescriptor =
+    SessionDescriptor activeSessionDescriptor =
         getOrAddSession(eventTime.windowIndex, eventTime.mediaPeriodId);
-    currentSessionId = currentSessionDescriptor.sessionId;
-    updateSessions(eventTime);
     if (eventTime.mediaPeriodId != null
         && eventTime.mediaPeriodId.isAd()
-        && (previousSessionDescriptor == null
-            || previousSessionDescriptor.windowSequenceNumber
+        && (currentMediaPeriodId == null
+            || currentMediaPeriodId.windowSequenceNumber
                 != eventTime.mediaPeriodId.windowSequenceNumber
-            || previousSessionDescriptor.adMediaPeriodId == null
-            || previousSessionDescriptor.adMediaPeriodId.adGroupIndex
-                != eventTime.mediaPeriodId.adGroupIndex
-            || previousSessionDescriptor.adMediaPeriodId.adIndexInAdGroup
-                != eventTime.mediaPeriodId.adIndexInAdGroup)) {
+            || currentMediaPeriodId.adGroupIndex != eventTime.mediaPeriodId.adGroupIndex
+            || currentMediaPeriodId.adIndexInAdGroup != eventTime.mediaPeriodId.adIndexInAdGroup)) {
       // New ad playback started. Find corresponding content session and notify ad playback started.
       MediaPeriodId contentMediaPeriodId =
           new MediaPeriodId(
               eventTime.mediaPeriodId.periodUid, eventTime.mediaPeriodId.windowSequenceNumber);
       SessionDescriptor contentSession =
           getOrAddSession(eventTime.windowIndex, contentMediaPeriodId);
-      listener.onAdPlaybackStarted(
-          eventTime, contentSession.sessionId, currentSessionDescriptor.sessionId);
+      if (contentSession.isCreated && activeSessionDescriptor.isCreated) {
+        listener.onAdPlaybackStarted(
+            eventTime, contentSession.sessionId, activeSessionDescriptor.sessionId);
+      }
     }
+    updateActiveSession(eventTime, activeSessionDescriptor);
   }
 
   private SessionDescriptor getOrAddSession(
@@ -293,14 +192,26 @@ public final class DefaultPlaybackSessionManager implements PlaybackSessionManag
       }
     }
     if (bestMatch == null) {
-      String sessionId = sessionIdGenerator.get();
+      String sessionId = generateSessionId();
       bestMatch = new SessionDescriptor(sessionId, windowIndex, mediaPeriodId);
       sessions.put(sessionId, bestMatch);
     }
     return bestMatch;
   }
 
-  private static String generateDefaultSessionId() {
+  @RequiresNonNull("listener")
+  private void updateActiveSession(EventTime eventTime, SessionDescriptor sessionDescriptor) {
+    currentMediaPeriodId = eventTime.mediaPeriodId;
+    if (sessionDescriptor.isCreated) {
+      activeSessionId = sessionDescriptor.sessionId;
+      if (!sessionDescriptor.isActive) {
+        sessionDescriptor.isActive = true;
+        listener.onSessionActive(eventTime, sessionDescriptor.sessionId);
+      }
+    }
+  }
+
+  private static String generateSessionId() {
     byte[] randomBytes = new byte[SESSION_ID_LENGTH];
     RANDOM.nextBytes(randomBytes);
     return Base64.encodeToString(randomBytes, Base64.URL_SAFE | Base64.NO_WRAP);
@@ -373,7 +284,8 @@ public final class DefaultPlaybackSessionManager implements PlaybackSessionManag
         int eventWindowIndex, @Nullable MediaPeriodId eventMediaPeriodId) {
       if (windowSequenceNumber == C.INDEX_UNSET
           && eventWindowIndex == windowIndex
-          && eventMediaPeriodId != null) {
+          && eventMediaPeriodId != null
+          && !eventMediaPeriodId.isAd()) {
         // Set window sequence number for this session as soon as we have one.
         windowSequenceNumber = eventMediaPeriodId.windowSequenceNumber;
       }

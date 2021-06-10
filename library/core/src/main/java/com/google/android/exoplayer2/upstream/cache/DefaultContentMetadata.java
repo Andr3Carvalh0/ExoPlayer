@@ -16,8 +16,9 @@
 package com.google.android.exoplayer2.upstream.cache;
 
 import androidx.annotation.Nullable;
-import com.google.common.base.Charsets;
+import com.google.android.exoplayer2.C;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -66,8 +67,8 @@ public final class DefaultContentMetadata implements ContentMetadata {
   @Override
   @Nullable
   public final byte[] get(String name, @Nullable byte[] defaultValue) {
-    @Nullable byte[] bytes = metadata.get(name);
-    if (bytes != null) {
+    if (metadata.containsKey(name)) {
+      byte[] bytes = metadata.get(name);
       return Arrays.copyOf(bytes, bytes.length);
     } else {
       return defaultValue;
@@ -77,9 +78,9 @@ public final class DefaultContentMetadata implements ContentMetadata {
   @Override
   @Nullable
   public final String get(String name, @Nullable String defaultValue) {
-    @Nullable byte[] bytes = metadata.get(name);
-    if (bytes != null) {
-      return new String(bytes, Charsets.UTF_8);
+    if (metadata.containsKey(name)) {
+      byte[] bytes = metadata.get(name);
+      return new String(bytes, Charset.forName(C.UTF8_NAME));
     } else {
       return defaultValue;
     }
@@ -87,8 +88,8 @@ public final class DefaultContentMetadata implements ContentMetadata {
 
   @Override
   public final long get(String name, long defaultValue) {
-    @Nullable byte[] bytes = metadata.get(name);
-    if (bytes != null) {
+    if (metadata.containsKey(name)) {
+      byte[] bytes = metadata.get(name);
       return ByteBuffer.wrap(bytes).getLong();
     } else {
       return defaultValue;
@@ -129,7 +130,7 @@ public final class DefaultContentMetadata implements ContentMetadata {
     }
     for (Entry<String, byte[]> entry : first.entrySet()) {
       byte[] value = entry.getValue();
-      @Nullable byte[] otherValue = second.get(entry.getKey());
+      byte[] otherValue = second.get(entry.getKey());
       if (!Arrays.equals(value, otherValue)) {
         return false;
       }
@@ -152,8 +153,8 @@ public final class DefaultContentMetadata implements ContentMetadata {
   }
 
   private static void addValues(HashMap<String, byte[]> metadata, Map<String, Object> values) {
-    for (Entry<String, Object> entry : values.entrySet()) {
-      metadata.put(entry.getKey(), getBytes(entry.getValue()));
+    for (String name : values.keySet()) {
+      metadata.put(name, getBytes(values.get(name)));
     }
   }
 
@@ -161,7 +162,7 @@ public final class DefaultContentMetadata implements ContentMetadata {
     if (value instanceof Long) {
       return ByteBuffer.allocate(8).putLong((Long) value).array();
     } else if (value instanceof String) {
-      return ((String) value).getBytes(Charsets.UTF_8);
+      return ((String) value).getBytes(Charset.forName(C.UTF8_NAME));
     } else if (value instanceof byte[]) {
       return (byte[]) value;
     } else {

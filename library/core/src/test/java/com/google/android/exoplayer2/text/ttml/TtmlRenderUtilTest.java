@@ -35,12 +35,12 @@ import org.junit.runner.RunWith;
 public final class TtmlRenderUtilTest {
 
   @Test
-  public void resolveStyleNoStyleAtAll() {
+  public void testResolveStyleNoStyleAtAll() {
     assertThat(resolveStyle(null, null, null)).isNull();
   }
 
   @Test
-  public void resolveStyleSingleReferentialStyle() {
+  public void testResolveStyleSingleReferentialStyle() {
     Map<String, TtmlStyle> globalStyles = getGlobalStyles();
     String[] styleIds = {"s0"};
 
@@ -49,7 +49,7 @@ public final class TtmlRenderUtilTest {
   }
 
   @Test
-  public void resolveStyleMultipleReferentialStyles() {
+  public void testResolveStyleMultipleReferentialStyles() {
     Map<String, TtmlStyle> globalStyles = getGlobalStyles();
     String[] styleIds = {"s0", "s1"};
 
@@ -67,7 +67,7 @@ public final class TtmlRenderUtilTest {
   }
 
   @Test
-  public void resolveMergeSingleReferentialStyleIntoInlineStyle() {
+  public void testResolveMergeSingleReferentialStyleIntoInlineStyle() {
     Map<String, TtmlStyle> globalStyles = getGlobalStyles();
     String[] styleIds = {"s0"};
     TtmlStyle style = new TtmlStyle();
@@ -83,7 +83,7 @@ public final class TtmlRenderUtilTest {
   }
 
   @Test
-  public void resolveMergeMultipleReferentialStylesIntoInlineStyle() {
+  public void testResolveMergeMultipleReferentialStylesIntoInlineStyle() {
     Map<String, TtmlStyle> globalStyles = getGlobalStyles();
     String[] styleIds = {"s0", "s1"};
     TtmlStyle style = new TtmlStyle();
@@ -99,7 +99,7 @@ public final class TtmlRenderUtilTest {
   }
 
   @Test
-  public void resolveStyleOnlyInlineStyle() {
+  public void testResolveStyleOnlyInlineStyle() {
     TtmlStyle inlineStyle = new TtmlStyle();
     assertThat(TtmlRenderUtil.resolveStyle(inlineStyle, null, null)).isSameInstanceAs(inlineStyle);
   }

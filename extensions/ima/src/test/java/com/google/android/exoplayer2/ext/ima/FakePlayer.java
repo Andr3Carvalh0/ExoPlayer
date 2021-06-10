@@ -21,33 +21,26 @@ import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.testutil.StubExoPlayer;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
-import com.google.android.exoplayer2.util.Clock;
-import com.google.android.exoplayer2.util.ListenerSet;
+import java.util.ArrayList;
 
 /** A fake player for testing content/ad playback. */
 /* package */ final class FakePlayer extends StubExoPlayer {
 
-  private final ListenerSet<Listener> listeners;
+  private final ArrayList<Player.EventListener> listeners;
   private final Timeline.Period period;
-  private final Object windowUid = new Object();
-  private final Object periodUid = new Object();
+  private final Timeline timeline;
 
-  private Timeline timeline;
+  private boolean prepared;
   @Player.State private int state;
   private boolean playWhenReady;
-  private int periodIndex;
-  private long positionMs;
-  private long contentPositionMs;
+  private long position;
+  private long contentPosition;
   private boolean isPlayingAd;
   private int adGroupIndex;
   private int adIndexInAdGroup;
 
   public FakePlayer() {
-    listeners =
-        new ListenerSet<>(
-            Looper.getMainLooper(),
-            Clock.DEFAULT,
-            (listener, flags) -> listener.onEvents(/* player= */ this, new Events(flags)));
+    listeners = new ArrayList<>();
     period = new Timeline.Period();
     state = Player.STATE_IDLE;
     playWhenReady = true;
@@ -55,50 +48,29 @@ import com.google.android.exoplayer2.util.ListenerSet;
   }
 
   /** Sets the timeline on this fake player, which notifies listeners with the changed timeline. */
-  public void updateTimeline(Timeline timeline, @TimelineChangeReason int reason) {
-    this.timeline = timeline;
-    listeners.sendEvent(
-        Player.EVENT_TIMELINE_CHANGED, listener -> listener.onTimelineChanged(timeline, reason));
+  public void updateTimeline(Timeline timeline) {
+    for (Player.EventListener listener : listeners) {
+      listener.onTimelineChanged(
+          timeline, prepared ? TIMELINE_CHANGE_REASON_DYNAMIC : TIMELINE_CHANGE_REASON_PREPARED);
+    }
+    prepared = true;
   }
 
   /**
    * Sets the state of this player as if it were playing content at the given {@code position}. If
    * an ad is currently playing, this will trigger a position discontinuity.
    */
-  public void setPlayingContentPosition(int periodIndex, long positionMs) {
+  public void setPlayingContentPosition(long position) {
     boolean notify = isPlayingAd;
-    PositionInfo oldPosition =
-        new PositionInfo(
-            windowUid,
-            /* windowIndex= */ 0,
-            periodUid,
-            /* periodIndex= */ 0,
-            this.positionMs,
-            this.contentPositionMs,
-            this.adGroupIndex,
-            this.adIndexInAdGroup);
     isPlayingAd = false;
     adGroupIndex = C.INDEX_UNSET;
     adIndexInAdGroup = C.INDEX_UNSET;
-    this.periodIndex = periodIndex;
-    this.positionMs = positionMs;
-    contentPositionMs = positionMs;
+    this.position = position;
+    contentPosition = position;
     if (notify) {
-      PositionInfo newPosition =
-          new PositionInfo(
-              windowUid,
-              /* windowIndex= */ 0,
-              periodUid,
-              /* periodIndex= */ 0,
-              positionMs,
-              this.contentPositionMs,
-              this.adGroupIndex,
-              this.adIndexInAdGroup);
-      listeners.sendEvent(
-          Player.EVENT_POSITION_DISCONTINUITY,
-          listener ->
-              listener.onPositionDiscontinuity(
-                  oldPosition, newPosition, DISCONTINUITY_REASON_AUTO_TRANSITION));
+      for (Player.EventListener listener : listeners) {
+        listener.onPositionDiscontinuity(DISCONTINUITY_REASON_AD_INSERTION);
+      }
     }
   }
 
@@ -108,67 +80,29 @@ import com.google.android.exoplayer2.util.ListenerSet;
    * position discontinuity.
    */
   public void setPlayingAdPosition(
-      int periodIndex,
-      int adGroupIndex,
-      int adIndexInAdGroup,
-      long positionMs,
-      long contentPositionMs) {
+      int adGroupIndex, int adIndexInAdGroup, long position, long contentPosition) {
     boolean notify = !isPlayingAd || this.adIndexInAdGroup != adIndexInAdGroup;
-    PositionInfo oldPosition =
-        new PositionInfo(
-            windowUid,
-            /* windowIndex= */ 0,
-            periodUid,
-            /* periodIndex= */ 0,
-            this.positionMs,
-            this.contentPositionMs,
-            this.adGroupIndex,
-            this.adIndexInAdGroup);
     isPlayingAd = true;
-    this.periodIndex = periodIndex;
     this.adGroupIndex = adGroupIndex;
     this.adIndexInAdGroup = adIndexInAdGroup;
-    this.positionMs = positionMs;
-    this.contentPositionMs = contentPositionMs;
+    this.position = position;
+    this.contentPosition = contentPosition;
     if (notify) {
-      PositionInfo newPosition =
-          new PositionInfo(
-              windowUid,
-              /* windowIndex= */ 0,
-              periodUid,
-              /* periodIndex= */ 0,
-              positionMs,
-              contentPositionMs,
-              adGroupIndex,
-              adIndexInAdGroup);
-      listeners.sendEvent(
-          EVENT_POSITION_DISCONTINUITY,
-          listener ->
-              listener.onPositionDiscontinuity(
-                  oldPosition, newPosition, DISCONTINUITY_REASON_AUTO_TRANSITION));
+      for (Player.EventListener listener : listeners) {
+        listener.onPositionDiscontinuity(DISCONTINUITY_REASON_AD_INSERTION);
+      }
     }
   }
 
   /** Sets the {@link Player.State} of this player. */
-  @SuppressWarnings("deprecation")
   public void setState(@Player.State int state, boolean playWhenReady) {
-    boolean playWhenReadyChanged = this.playWhenReady != playWhenReady;
-    boolean playbackStateChanged = this.state != state;
+    boolean notify = this.state != state || this.playWhenReady != playWhenReady;
     this.state = state;
     this.playWhenReady = playWhenReady;
-    if (playbackStateChanged || playWhenReadyChanged) {
-      listeners.sendEvent(
-          Player.EVENT_PLAYBACK_STATE_CHANGED,
-          listener -> {
-            listener.onPlayerStateChanged(playWhenReady, state);
-            if (playbackStateChanged) {
-              listener.onPlaybackStateChanged(state);
-            }
-            if (playWhenReadyChanged) {
-              listener.onPlayWhenReadyChanged(
-                  playWhenReady, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST);
-            }
-          });
+    if (notify) {
+      for (Player.EventListener listener : listeners) {
+        listener.onPlayerStateChanged(playWhenReady, state);
+      }
     }
   }
 
@@ -185,18 +119,13 @@ import com.google.android.exoplayer2.util.ListenerSet;
   }
 
   @Override
-  public void addListener(Player.Listener listener) {
+  public void addListener(Player.EventListener listener) {
     listeners.add(listener);
   }
 
   @Override
-  public void removeListener(Player.Listener listener) {
+  public void removeListener(Player.EventListener listener) {
     listeners.remove(listener);
-  }
-
-  @Override
-  public Commands getAvailableCommands() {
-    return Commands.EMPTY;
   }
 
   @Override
@@ -208,17 +137,6 @@ import com.google.android.exoplayer2.util.ListenerSet;
   @Override
   public boolean getPlayWhenReady() {
     return playWhenReady;
-  }
-
-  @Override
-  @RepeatMode
-  public int getRepeatMode() {
-    return REPEAT_MODE_OFF;
-  }
-
-  @Override
-  public boolean getShuffleModeEnabled() {
-    return false;
   }
 
   @Override
@@ -238,7 +156,7 @@ import com.google.android.exoplayer2.util.ListenerSet;
 
   @Override
   public int getCurrentPeriodIndex() {
-    return periodIndex;
+    return 0;
   }
 
   @Override
@@ -262,7 +180,7 @@ import com.google.android.exoplayer2.util.ListenerSet;
 
   @Override
   public long getCurrentPosition() {
-    return positionMs;
+    return position;
   }
 
   @Override
@@ -282,6 +200,6 @@ import com.google.android.exoplayer2.util.ListenerSet;
 
   @Override
   public long getContentPosition() {
-    return contentPositionMs;
+    return contentPosition;
   }
 }

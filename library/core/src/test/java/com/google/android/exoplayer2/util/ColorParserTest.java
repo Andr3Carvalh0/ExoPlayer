@@ -35,29 +35,29 @@ public final class ColorParserTest {
   // Negative tests.
 
   @Test(expected = IllegalArgumentException.class)
-  public void parseUnknownColor() {
+  public void testParseUnknownColor() {
     ColorParser.parseTtmlColor("colorOfAnElectron");
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void parseNull() {
+  public void testParseNull() {
     ColorParser.parseTtmlColor(null);
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void parseEmpty() {
+  public void testParseEmpty() {
     ColorParser.parseTtmlColor("");
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void rgbColorParsingRgbValuesNegative() {
+  public void testRgbColorParsingRgbValuesNegative() {
     ColorParser.parseTtmlColor("rgb(-4, 55, 209)");
   }
 
   // Positive tests.
 
   @Test
-  public void hexCodeParsing() {
+  public void testHexCodeParsing() {
     assertThat(parseTtmlColor("#FFFFFF")).isEqualTo(WHITE);
     assertThat(parseTtmlColor("#FFFFFFFF")).isEqualTo(WHITE);
     assertThat(parseTtmlColor("#123456")).isEqualTo(parseColor("#FF123456"));
@@ -67,14 +67,14 @@ public final class ColorParserTest {
   }
 
   @Test
-  public void rgbColorParsing() {
+  public void testRgbColorParsing() {
     assertThat(parseTtmlColor("rgb(255,255,255)")).isEqualTo(WHITE);
     // Spaces are ignored.
     assertThat(parseTtmlColor("   rgb (      255, 255, 255)")).isEqualTo(WHITE);
   }
 
   @Test
-  public void rgbColorParsingRgbValuesOutOfBounds() {
+  public void testRgbColorParsingRgbValuesOutOfBounds() {
     int outOfBounds = ColorParser.parseTtmlColor("rgb(999, 999, 999)");
     int color = Color.rgb(999, 999, 999);
     // Behave like the framework does.
@@ -82,7 +82,7 @@ public final class ColorParserTest {
   }
 
   @Test
-  public void rgbaColorParsing() {
+  public void testRgbaColorParsing() {
     assertThat(parseTtmlColor("rgba(255,255,255,255)")).isEqualTo(WHITE);
     assertThat(parseTtmlColor("rgba(255,255,255,255)"))
         .isEqualTo(argb(255, 255, 255, 255));

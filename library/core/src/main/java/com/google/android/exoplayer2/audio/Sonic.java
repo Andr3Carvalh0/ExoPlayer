@@ -16,8 +16,6 @@
  */
 package com.google.android.exoplayer2.audio;
 
-import static java.lang.Math.min;
-
 import com.google.android.exoplayer2.util.Assertions;
 import java.nio.ShortBuffer;
 import java.util.Arrays;
@@ -84,14 +82,6 @@ import java.util.Arrays;
   }
 
   /**
-   * Returns the number of bytes that have been input, but will not be processed until more input
-   * data is provided.
-   */
-  public int getPendingInputBytes() {
-    return inputFrameCount * channelCount * BYTES_PER_SAMPLE;
-  }
-
-  /**
    * Queues remaining data from {@code buffer}, and advances its position by the number of bytes
    * consumed.
    *
@@ -113,7 +103,7 @@ import java.util.Arrays;
    * @param buffer A {@link ShortBuffer} into which output will be written.
    */
   public void getOutput(ShortBuffer buffer) {
-    int framesToRead = min(buffer.remaining() / channelCount, outputFrameCount);
+    int framesToRead = Math.min(buffer.remaining() / channelCount, outputFrameCount);
     buffer.put(outputBuffer, 0, framesToRead * channelCount);
     outputFrameCount -= framesToRead;
     System.arraycopy(
@@ -215,7 +205,7 @@ import java.util.Arrays;
   }
 
   private int copyInputToOutput(int positionFrames) {
-    int frameCount = min(maxRequiredFrameCount, remainingInputToCopyFrameCount);
+    int frameCount = Math.min(maxRequiredFrameCount, remainingInputToCopyFrameCount);
     copyToOutput(inputBuffer, positionFrames, frameCount);
     remainingInputToCopyFrameCount -= frameCount;
     return frameCount;
